@@ -2,6 +2,9 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+# Install OpenSSL (required by Prisma)
+RUN apk add --no-cache openssl
+
 # Copy package files
 COPY package*.json ./
 COPY database ./database/
@@ -21,6 +24,9 @@ RUN npm run build
 FROM node:20-alpine AS runner
 
 WORKDIR /app
+
+# Install OpenSSL (required by Prisma at runtime)
+RUN apk add --no-cache openssl
 
 ENV NODE_ENV=production
 ENV PORT=3333
