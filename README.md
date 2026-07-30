@@ -56,7 +56,7 @@ DATABASE_URL="file:../database/dev.db"
 JWT_SECRET="ganti_dengan_jwt_secret_yang_aman_dan_acak"
 
 # Port Server
-PORT=3000
+PORT=3333
 
 # Node Environment
 NODE_ENV=production
@@ -87,7 +87,7 @@ docker compose version
 
 ### 2. Clone Repository & Setup `.env`
 ```bash
-git clone <URL_REPOSITORY_ANDA> kopi-selon-ems
+git clone https://github.com/zaivnet/Kopi-Selon-EMS kopi-selon-ems
 cd kopi-selon-ems
 cp .env.example .env
 # Edit .env sesuai kebutuhan
