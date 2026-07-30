@@ -1,0 +1,123 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 36 31% 97%;
+    --foreground: 24 35% 16%;
+    --card: 0 0% 100%;
+    --card-foreground: 24 35% 16%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 24 35% 16%;
+    --primary: 22 33% 28%;
+    --primary-foreground: 36 31% 97%;
+    --secondary: 31 48% 78%;
+    --secondary-foreground: 24 35% 16%;
+    --muted: 36 26% 94%;
+    --muted-foreground: 24 18% 44%;
+    --accent: 39 63% 90%;
+    --accent-foreground: 24 35% 16%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 30 20% 88%;
+    --input: 30 20% 88%;
+    --ring: 22 33% 28%;
+    --radius: 1.1rem;
+    --espresso-amber: #D97706;
+    --espresso-cream: #FDFBF7;
+    --espresso-card: #FFFFFF;
+  }
+
+  .dark {
+    --background: 20 28% 8%;
+    --foreground: 36 30% 95%;
+    --card: 20 25% 12%;
+    --card-foreground: 36 30% 95%;
+    --popover: 20 25% 12%;
+    --popover-foreground: 36 30% 95%;
+    --primary: 38 92% 50%;
+    --primary-foreground: 20 35% 10%;
+    --secondary: 20 20% 18%;
+    --secondary-foreground: 36 30% 95%;
+    --muted: 20 20% 16%;
+    --muted-foreground: 25 15% 65%;
+    --accent: 20 25% 20%;
+    --accent-foreground: 36 30% 95%;
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 20 18% 20%;
+    --input: 20 18% 20%;
+    --ring: 38 92% 50%;
+    --espresso-amber: #F59E0B;
+    --espresso-cream: #261C16;
+    --espresso-card: #221812;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    color-scheme: dark light;
+    text-size-adjust: 100%;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply min-h-screen bg-background text-foreground antialiased;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background-image: radial-gradient(circle at top left, rgba(217, 119, 6, 0.12), transparent 36%), linear-gradient(135deg, rgba(253, 251, 247, 0.95), rgba(245, 235, 224, 0.8));
+    background-attachment: fixed;
+    line-height: 1.5;
+    letter-spacing: -0.01em;
+  }
+
+  .dark body {
+    background-image: radial-gradient(circle at top left, rgba(245, 158, 11, 0.14), transparent 35%), linear-gradient(135deg, rgba(27, 19, 14, 0.98), rgba(18, 12, 9, 1));
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    letter-spacing: -0.025em;
+    line-height: 1.25;
+  }
+
+  ::selection {
+    @apply bg-amber-500/30 text-amber-200;
+  }
+}
+
+/* Custom Responsive Typography & Utility Spacing Classes */
+@layer utilities {
+  .text-fluid-h1 {
+    font-size: clamp(1.5rem, 3.5vw + 0.5rem, 2.35rem);
+    line-height: 1.2;
+    letter-spacing: -0.03em;
+  }
+
+  .text-fluid-h2 {
+    font-size: clamp(1.2rem, 2.5vw + 0.4rem, 1.75rem);
+    line-height: 1.25;
+    letter-spacing: -0.025em;
+  }
+
+  .text-fluid-metric {
+    font-size: clamp(1.75rem, 4vw + 0.2rem, 2.5rem);
+    line-height: 1.1;
+    letter-spacing: -0.035em;
+  }
+
+  .text-label-caps {
+    font-size: 0.725rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    line-height: 1.4;
+  }
+}
+

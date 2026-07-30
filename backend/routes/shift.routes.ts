@@ -1,0 +1,15 @@
+import { Router } from 'express';
+import { getShifts, createShift, updateShift, deleteShift, assignShift } from '../controllers/shift.controller.js';
+import { authenticate, authorizePermission } from '../middleware/auth.middleware.js';
+
+const router = Router();
+
+router.use(authenticate);
+
+router.get('/', authorizePermission('shift.view'), getShifts);
+router.post('/', authorizePermission('shift.create'), createShift);
+router.post('/assign', authorizePermission('shift.edit'), assignShift);
+router.put('/:id', authorizePermission('shift.edit'), updateShift);
+router.delete('/:id', authorizePermission('shift.delete'), deleteShift);
+
+export default router;

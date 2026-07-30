@@ -1,0 +1,6 @@
+{
+  "name": "KOPI SELON EMS",
+  "description": "Employee Management System for KOPI SELON with real-time selfie attendance.",
+  "requestFramePermissions": ["camera", "geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

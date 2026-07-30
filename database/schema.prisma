@@ -1,0 +1,345 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Role {
+  id          String           @id @default(uuid())
+  name        String           @unique
+  description String?
+  users       User[]
+  permissions RolePermission[]
+
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  deletedAt   DateTime?
+  @@index([createdAt])
+}
+
+model RolePermission {
+  id           String   @id @default(uuid())
+  roleId       String
+  role         Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permissionId String
+
+  createdAt    DateTime @default(now())
+
+  @@unique([roleId, permissionId])
+}
+
+model User {
+  id           String        @id @default(uuid())
+  username     String        @unique
+  password     String
+  roleId       String
+  role         Role          @relation(fields: [roleId], references: [id])
+  employee     Employee?
+  activityLogs ActivityLog[]
+  reviewedRequests EmployeeRequest[] @relation("RequestReviewer")
+
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  deletedAt    DateTime?
+}
+
+model Employee {
+  id              String         @id @default(uuid())
+  userId          String         @unique
+  user            User           @relation(fields: [userId], references: [id])
+  firstName       String
+  lastName        String?
+  phone           String?
+  address         String?
+  joinDate        DateTime?
+  gender          String?
+  status          String         @default("ACTIVE")
+  shiftId         String?
+  shift           WorkShift?     @relation(fields: [shiftId], references: [id])
+  baseSalary      Float?
+  photoUrl        String?
+  
+  attendances     Attendance[]
+  workSchedules   WorkSchedule[]
+  salaryHistories SalaryHistory[]
+  leaves          Leave[]
+  permissions     Permission[]
+
+  submittedRequests EmployeeRequest[] @relation("RequesterEmployee")
+  targetRequests    EmployeeRequest[] @relation("TargetEmployeeRelation")
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  deletedAt       DateTime?
+}
+
+model Attendance {
+  id          String            @id @default(uuid())
+  employeeId  String
+  employee    Employee          @relation(fields: [employeeId], references: [id])
+  date        DateTime          
+  clockIn     DateTime?
+  clockOut    DateTime?
+  status      String            // PRESENT, ABSENT, LATE, HALFDAY
+  notes       String?
+  photos      AttendancePhoto[]
+
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  deletedAt   DateTime?
+  @@index([date])
+  @@index([employeeId, date])
+}
+
+model AttendancePhoto {
+  id           String     @id @default(uuid())
+  attendanceId String
+  attendance   Attendance @relation(fields: [attendanceId], references: [id])
+  photoUrl     String
+  type         String     // CLOCK_IN, CLOCK_OUT
+  latitude     Float?
+  longitude    Float?
+  ipAddress    String?
+  browser      String?
+  device       String?
+
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  deletedAt    DateTime?
+}
+
+model WorkShift {
+  id                  String            @id @default(uuid())
+  name                String
+  startTime           String            // e.g., "08:00"
+  endTime             String            // e.g., "17:00"
+  schedules           WorkSchedule[]
+  employees           Employee[]
+  targetShiftRequests EmployeeRequest[] @relation("TargetShiftRelation")
+
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  deletedAt   DateTime?
+}
+
+model WorkSchedule {
+  id          String    @id @default(uuid())
+  employeeId  String
+  employee    Employee  @relation(fields: [employeeId], references: [id])
+  shiftId     String
+  shift       WorkShift @relation(fields: [shiftId], references: [id])
+  date        DateTime  
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+}
+
+model SalaryRule {
+  id                        String    @id @default(uuid())
+  absentDeduction           Float     @default(0) // Tidak Masuk
+  lateDeductionPerMinute    Float     @default(0) // Terlambat
+  underworkDeductionPerHour Float     @default(0) // Kurang jam
+  isActive                  Boolean   @default(true)
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+  deletedAt                 DateTime?
+}
+
+model SalaryHistory {
+  id             String            @id @default(uuid())
+  employeeId     String
+  employee       Employee          @relation(fields: [employeeId], references: [id])
+  periodMonth    Int
+  periodYear     Int
+  baseSalary     Float           
+  totalAllowance Float           
+  totalDeduction Float           
+  netSalary      Float           
+  paymentDate    DateTime?
+  status         String            // PENDING, PAID
+  
+  deductions     SalaryDeduction[]
+
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  deletedAt      DateTime?
+  @@index([periodYear, periodMonth])
+  @@index([employeeId, periodYear, periodMonth])
+}
+
+model SalaryDeduction {
+  id              String        @id @default(uuid())
+  salaryHistoryId String
+  salaryHistory   SalaryHistory @relation(fields: [salaryHistoryId], references: [id])
+  name            String
+  amount          Float       
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  deletedAt       DateTime?
+}
+
+model Holiday {
+  id          String    @id @default(uuid())
+  name        String
+  date        DateTime  
+  description String?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+}
+
+model Leave {
+  id          String    @id @default(uuid())
+  employeeId  String
+  employee    Employee  @relation(fields: [employeeId], references: [id])
+  type        String    // ANNUAL, SICK, UNPAID
+  startDate   DateTime  
+  endDate     DateTime  
+  reason      String?
+  status      String    // PENDING, APPROVED, REJECTED
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+}
+
+model Permission {
+  id          String    @id @default(uuid())
+  employeeId  String
+  employee    Employee  @relation(fields: [employeeId], references: [id])
+  date        DateTime  
+  reason      String
+  status      String    // PENDING, APPROVED, REJECTED
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+}
+
+model Announcement {
+  id          String    @id @default(uuid())
+  title       String
+  content     String    
+  isPublished Boolean   @default(false)
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+}
+
+model ActivityLog {
+  id          String    @id @default(uuid())
+  userId      String?
+  user        User?     @relation(fields: [userId], references: [id])
+  action      String
+  entity      String
+  entityId    String?
+  details     String?   
+  ipAddress   String?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+}
+
+model Setting {
+  id          String    @id @default(uuid())
+  key         String    @unique
+  value       String    
+  description String?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+}
+
+model LocationSetting {
+  id          String    @id @default(uuid())
+  name        String
+  latitude    Float   
+  longitude   Float   
+  radius      Int       // in meters
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+}
+
+model CompanyProfile {
+  id          String    @id @default(uuid())
+  name        String
+  address     String?
+  mapsLink    String?
+  phone       String?
+  email       String?
+  hours       String?
+  about       String?
+  logoUrl     String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+}
+
+model EmployeeRequest {
+  id               String   @id @default(uuid())
+  requestNumber    String   @unique
+  employeeId       String
+  employee         Employee @relation("RequesterEmployee", fields: [employeeId], references: [id])
+  
+  type             String   // SWAP_SHIFT, CHANGE_SHIFT, LEAVE, SICK_LEAVE, PERMISSION
+  permissionType   String?  // LATE_ARRIVAL, EARLY_LEAVE, ABSENT
+
+  startDate        DateTime
+  endDate          DateTime?
+  
+  currentShiftId   String?
+  targetShiftId    String?
+  targetShift      WorkShift? @relation("TargetShiftRelation", fields: [targetShiftId], references: [id])
+  
+  targetEmployeeId String?
+  targetEmployee   Employee?  @relation("TargetEmployeeRelation", fields: [targetEmployeeId], references: [id])
+  peerStatus       String?    // PENDING, ACCEPTED, REJECTED
+  peerRespondedAt  DateTime?
+  peerNote         String?
+
+  reason           String
+  attachmentUrl    String?
+  status           String     @default("Submitted") // Draft, Submitted, Waiting Employee Approval, Waiting Staff Approval, Approved, Rejected, Cancelled
+  
+  reviewerId       String?
+  reviewerUser     User?      @relation("RequestReviewer", fields: [reviewerId], references: [id])
+  reviewerNote     String?
+  reviewedAt       DateTime?
+
+  timelines        RequestTimeline[]
+  
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  deletedAt        DateTime?
+
+  @@index([employeeId])
+  @@index([targetEmployeeId])
+  @@index([status])
+  @@index([type])
+}
+
+model RequestTimeline {
+  id         String          @id @default(uuid())
+  requestId  String
+  request    EmployeeRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  stepName   String
+  status     String          // COMPLETED, PENDING, REJECTED, SKIPPED
+  actorName  String?
+  actorRole  String?
+  comment    String?
+  actionAt   DateTime?       @default(now())
+
+  createdAt  DateTime        @default(now())
+}
+

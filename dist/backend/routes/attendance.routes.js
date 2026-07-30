@@ -1,0 +1,13 @@
+import { Router } from 'express';
+import { getStatus, submitAttendance, getMonitoring, checkAttendanceLocation, getMyAttendances } from '../controllers/attendance.controller.js';
+import { authenticate, authorize } from '../middleware/auth.middleware.js';
+const router = Router();
+router.use(authenticate);
+// Karyawan routes
+router.get('/status', getStatus);
+router.get('/me', getMyAttendances);
+router.post('/location-check', checkAttendanceLocation);
+router.post('/', submitAttendance);
+// Admin routes
+router.get('/monitoring', authorize(['Administrator', 'Owner', 'Staff']), getMonitoring);
+export default router;
