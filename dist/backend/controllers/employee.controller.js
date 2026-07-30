@@ -1,5 +1,6 @@
 import bcrypt from 'bcrypt';
 import { prisma } from '../lib/prisma.js';
+import { HIDDEN_ROLES } from '../lib/constants.js';
 export const getMyEmployeeProfile = async (req, res) => {
     try {
         const userId = req.user?.id;
@@ -50,7 +51,11 @@ export const getEmployees = async (req, res) => {
                 }
             },
             where: {
-                deletedAt: null
+                deletedAt: null,
+                user: {
+                    deletedAt: null,
+                    role: { name: { notIn: HIDDEN_ROLES } }
+                }
             },
             orderBy: {
                 createdAt: 'desc'

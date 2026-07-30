@@ -2,6 +2,7 @@ import { prisma } from '../lib/prisma.js';
 import fs from 'fs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { HIDDEN_ROLES } from '../lib/constants.js';
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 export function getDistanceFromLatLonInM(lat1, lon1, lat2, lon2) {
     const R = 6371e3; // Radius of the earth in m
@@ -307,7 +308,13 @@ export const getMonitoring = async (req, res) => {
         yesterday.setDate(yesterday.getDate() - 1);
         const now = new Date();
         const employees = await prisma.employee.findMany({
-            where: { deletedAt: null },
+            where: {
+                deletedAt: null,
+                user: {
+                    deletedAt: null,
+                    role: { name: { notIn: HIDDEN_ROLES } }
+                }
+            },
             include: {
                 shift: true,
                 user: { select: { role: true } },

@@ -5,6 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { Server } from 'socket.io';
+import { HIDDEN_ROLES } from '../lib/constants.js';
 
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 
@@ -324,7 +325,13 @@ export const getMonitoring = async (req: Request, res: Response) => {
     const now = new Date();
 
     const employees = await prisma.employee.findMany({
-      where: { deletedAt: null },
+      where: {
+        deletedAt: null,
+        user: {
+          deletedAt: null,
+          role: { name: { notIn: HIDDEN_ROLES as unknown as string[] } }
+        }
+      },
       include: {
         shift: true,
         user: { select: { role: true } },

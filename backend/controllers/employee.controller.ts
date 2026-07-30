@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import { prisma } from '../lib/prisma.js';
 import { AuthRequest } from '../middleware/auth.middleware.js';
+import { HIDDEN_ROLES } from '../lib/constants.js';
 
 export const getMyEmployeeProfile = async (req: AuthRequest, res: Response) => {
   try {
@@ -53,7 +54,11 @@ export const getEmployees = async (req: AuthRequest, res: Response) => {
         }
       },
       where: {
-        deletedAt: null
+        deletedAt: null,
+        user: {
+          deletedAt: null,
+          role: { name: { notIn: HIDDEN_ROLES as unknown as string[] } }
+        }
       },
       orderBy: {
         createdAt: 'desc'

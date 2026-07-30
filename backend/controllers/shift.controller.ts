@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
+import { HIDDEN_ROLES } from '../lib/constants.js';
 
 export const getShifts = async (req: Request, res: Response) => {
   try {
@@ -8,7 +9,13 @@ export const getShifts = async (req: Request, res: Response) => {
       where: { deletedAt: null },
       include: {
         employees: {
-          where: { deletedAt: null },
+          where: {
+            deletedAt: null,
+            user: {
+              deletedAt: null,
+              role: { name: { notIn: HIDDEN_ROLES as unknown as string[] } }
+            }
+          },
           select: { id: true, firstName: true, lastName: true }
         }
       },

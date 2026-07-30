@@ -1,12 +1,19 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
+import { HIDDEN_ROLES } from '../lib/constants.js';
 export const getShifts = async (req, res) => {
     try {
         const shifts = await prisma.workShift.findMany({
             where: { deletedAt: null },
             include: {
                 employees: {
-                    where: { deletedAt: null },
+                    where: {
+                        deletedAt: null,
+                        user: {
+                            deletedAt: null,
+                            role: { name: { notIn: HIDDEN_ROLES } }
+                        }
+                    },
                     select: { id: true, firstName: true, lastName: true }
                 }
             },
