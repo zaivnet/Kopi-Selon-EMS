@@ -23,7 +23,7 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
-ENV PORT=3000
+ENV PORT=3333
 
 # Copy node_modules and built assets from builder
 COPY --from=builder /app/package*.json ./
@@ -35,7 +35,7 @@ COPY --from=builder /app/uploads ./uploads
 # Ensure persistent directories exist
 RUN mkdir -p database uploads
 
-EXPOSE 3000
+EXPOSE 3333
 
 # Push database schema if needed and start the application
 CMD ["sh", "-c", "npx prisma db push --schema=database/schema.prisma && npm start"]

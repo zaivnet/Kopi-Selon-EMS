@@ -293,9 +293,44 @@ Database SQLite tersimpan di `database/dev.db` dan file upload karyawan tersimpa
 
 ---
 
-## 📞 Troubleshooting
+## 📞 Troubleshooting & Solusi Port Bentrok
+
+### Error: `failed to bind host port 0.0.0.0:3000/tcp: address already in use`
+Error ini terjadi karena port `3000` di VPS/Server Anda sudah dipakai oleh aplikasi/service lain.
+
+#### Cara Mengubah Port Docker:
+
+**Metode A: Lewat file `.env` (Paling Mudah)**
+1. Buka file `.env` di VPS/Server Anda:
+   ```bash
+   nano .env
+   ```
+2. Ubah `PORT` ke port lain yang masih kosong (contoh: `8080`, `3001`, atau `8000`):
+   ```env
+   PORT=8080
+   ```
+3. Restart Docker Compose:
+   ```bash
+   docker compose down
+   docker compose up -d --build
+   ```
+   Aplikasi sekarang akan dapat diakses melalui `http://IP_VPS_ANDA:8080`.
+
+**Metode B: Langsung di file `docker-compose.yml`**
+1. Buka file `docker-compose.yml`:
+   ```bash
+   nano docker-compose.yml
+   ```
+2. Ubah bagian `ports` (Format: `"PORT_VPS:PORT_CONTAINER"`):
+   ```yaml
+   ports:
+     - "8080:3000"
+   ```
+3. Jalankan kembali:
+   ```bash
+   docker compose up -d
+   ```
 
 - **Lupa Password Admin?**
   Jalankan `npm run db:seed` untuk memastikan akun admin utama aktif.
-- **Port 3000 sudah digunakan?**
-  Ubah nilai `PORT` pada file `.env` atau `docker-compose.yml`.
+

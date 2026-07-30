@@ -76,7 +76,7 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 });
 
 const isProduction = process.env.NODE_ENV === 'production';
-const port = 3000;
+const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 async function startServer() {
   try {
