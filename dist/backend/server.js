@@ -21,6 +21,7 @@ import reportRoutes from "./routes/report.routes.js";
 import dashboardRoutes from "./routes/dashboard.routes.js";
 import requestRoutes from "./routes/request.routes.js";
 import { seedDatabase } from './lib/seed.js';
+import { initAutoBackup } from './lib/auto-backup.js';
 dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -67,6 +68,7 @@ const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 async function startServer() {
     try {
         await seedDatabase();
+        initAutoBackup();
     }
     catch (err) {
         console.error('Seed execution warning:', err);

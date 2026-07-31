@@ -313,6 +313,16 @@ Seluruh data database tersimpan pada `database/dev.db` dan foto presensi pada `u
   tar -czvf backups/uploads_backup_$(date +%Y%m%d).tar.gz uploads/
   ```
 
+- **Backup Otomatis (Auto Backup)**:
+  Sistem melakukan pencadangan database secara otomatis di latar belakang ke folder `backups/`. Anda dapat mengatur perilaku backup di dalam file `.env`:
+  ```env
+  # Frekuensi backup otomatis dalam satuan jam (Default: 24 jam)
+  AUTO_BACKUP_INTERVAL_HOURS=24
+
+  # Jumlah file backup otomatis maksimum yang disimpan sebelum dihapus (Default: 10)
+  AUTO_BACKUP_MAX_KEEP=10
+  ```
+
 - **Proxmox Backup (Proxmox VE / PBS)**:
   Jika di-deploy di Proxmox LXC/VM, Anda dapat menjadwalkan **VZDump Backup** atau **Proxmox Backup Server** harian secara langsung dari dashboard Proxmox VE.
 
