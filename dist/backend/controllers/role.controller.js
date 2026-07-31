@@ -93,7 +93,14 @@ export const getRoles = async (req, res) => {
             permissions: role.permissions.map(p => p.permissionId)
         }));
         const sortedRoles = sortRolesByHierarchy(formattedRoles);
-        res.json(sortedRoles);
+        // Hide Owner role from non-admin/non-owner users (like Staff/Karyawan)
+        const userRole = req.user?.role?.name;
+        const hideOwner = userRole !== 'Administrator' && userRole !== 'Owner';
+        let filteredRoles = sortedRoles;
+        if (hideOwner) {
+            filteredRoles = sortedRoles.filter(role => role.name !== 'Owner');
+        }
+        res.json(filteredRoles);
     }
     catch (error) {
         console.error('getRoles Error:', error);
@@ -119,6 +126,11 @@ export const updateRolePermissions = async (req, res) => {
         });
         if (!role) {
             return res.status(404).json({ message: `Role '${idOrName}' tidak ditemukan` });
+        }
+        // Restrict Owner permissions modification to Admin/Owner only
+        const userRole = req.user?.role?.name;
+        if (role.name === 'Owner' && userRole !== 'Administrator' && userRole !== 'Owner') {
+            return res.status(403).json({ message: 'Akses ditolak: Anda tidak memiliki wewenang untuk mengubah hak akses role Owner.' });
         }
         await prisma.$transaction(async (tx) => {
             // Delete existing permissions for this role

@@ -36,6 +36,13 @@ export const getMyEmployeeProfile = async (req: AuthRequest, res: Response) => {
 
 export const getEmployees = async (req: AuthRequest, res: Response) => {
   try {
+    const userRole = req.user?.role?.name;
+    const hideOwner = userRole !== 'Administrator' && userRole !== 'Owner';
+    const excludedRoleNames = [...HIDDEN_ROLES] as string[];
+    if (hideOwner) {
+      excludedRoleNames.push('Owner');
+    }
+
     const employees = await prisma.employee.findMany({
       include: {
         user: {
@@ -59,7 +66,7 @@ export const getEmployees = async (req: AuthRequest, res: Response) => {
         deletedAt: null,
         user: {
           deletedAt: null,
-          role: { name: { notIn: HIDDEN_ROLES as unknown as string[] } }
+          role: { name: { notIn: excludedRoleNames } }
         }
       },
       orderBy: {
@@ -89,6 +96,14 @@ export const getEmployee = async (req: AuthRequest, res: Response) => {
     });
 
     if (!employee) return res.status(404).json({ message: 'Employee not found' });
+
+    // Restrict Staff/Karyawan from viewing Owner profile
+    const userRole = req.user?.role?.name;
+    const targetRole = employee.user?.role?.name;
+    if (targetRole === 'Owner' && userRole !== 'Administrator' && userRole !== 'Owner') {
+      return res.status(403).json({ message: 'Akses ditolak: Anda tidak memiliki wewenang untuk melihat profil Owner.' });
+    }
+
     res.json(employee);
   } catch (error) {
     res.status(500).json({ message: 'Internal server error' });
@@ -119,8 +134,11 @@ export const createEmployee = async (req: AuthRequest, res: Response) => {
     }
 
     const currentUserRole = req.user?.role?.name || req.user?.role;
+    const selectedRole = await prisma.role.findUnique({ where: { id: roleId } });
+    if (selectedRole?.name === 'Owner' && currentUserRole !== 'Administrator' && currentUserRole !== 'Owner') {
+      return res.status(403).json({ message: 'Akses ditolak: Anda tidak memiliki wewenang untuk menetapkan role Owner.' });
+    }
     if (currentUserRole === 'Staff') {
-      const selectedRole = await prisma.role.findUnique({ where: { id: roleId } });
       if (selectedRole && !STAFF_ASSIGNABLE_ROLES.includes(selectedRole.name)) {
         return res.status(403).json({ message: 'Staff hanya boleh menetapkan role Staff atau Karyawan.' });
       }
@@ -182,16 +200,28 @@ export const updateEmployee = async (req: AuthRequest, res: Response) => {
 
     const employee = await prisma.employee.findUnique({
       where: { id },
-      include: { user: true }
+      include: { user: { include: { role: true } } }
     });
 
     if (!employee) return res.status(404).json({ message: 'Employee not found' });
 
     const currentUserRole = req.user?.role?.name || req.user?.role;
-    if (roleId && roleId !== employee.user.roleId && currentUserRole === 'Staff') {
+    const targetEmployeeRole = employee.user?.role?.name;
+
+    // Staff/Karyawan tidak bisa mengedit data Owner
+    if (targetEmployeeRole === 'Owner' && currentUserRole !== 'Administrator' && currentUserRole !== 'Owner') {
+      return res.status(403).json({ message: 'Akses ditolak: Anda tidak memiliki wewenang untuk mengubah profil Owner.' });
+    }
+
+    if (roleId && roleId !== employee.user.roleId) {
       const selectedRole = await prisma.role.findUnique({ where: { id: roleId } });
-      if (selectedRole && !STAFF_ASSIGNABLE_ROLES.includes(selectedRole.name)) {
-        return res.status(403).json({ message: 'Staff hanya boleh menetapkan role Staff atau Karyawan.' });
+      if (selectedRole?.name === 'Owner' && currentUserRole !== 'Administrator' && currentUserRole !== 'Owner') {
+        return res.status(403).json({ message: 'Akses ditolak: Anda tidak memiliki wewenang untuk menetapkan role Owner.' });
+      }
+      if (currentUserRole === 'Staff') {
+        if (selectedRole && !STAFF_ASSIGNABLE_ROLES.includes(selectedRole.name)) {
+          return res.status(403).json({ message: 'Staff hanya boleh menetapkan role Staff atau Karyawan.' });
+        }
       }
     }
 
@@ -246,13 +276,6 @@ export const updateEmployee = async (req: AuthRequest, res: Response) => {
         userUpdateData.username = newUsername;
       }
       if (roleId && roleId !== employee.user.roleId) {
-        const currentUserRole = req.user?.role?.name || req.user?.role;
-        if (currentUserRole === 'Staff') {
-          const selectedRole = await tx.role.findUnique({ where: { id: roleId } });
-          if (selectedRole && !STAFF_ASSIGNABLE_ROLES.includes(selectedRole.name)) {
-            throw new Error('Staff hanya boleh menetapkan role Staff atau Karyawan.');
-          }
-        }
         userUpdateData.roleId = roleId;
       }
       if (typeof reqPassword === 'string' && reqPassword.trim().length > 0) {
@@ -281,17 +304,31 @@ export const deleteEmployee = async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string;
     
+    const employee = await prisma.employee.findUnique({
+      where: { id },
+      include: { user: { include: { role: true } } }
+    });
+    
+    if (!employee) return res.status(404).json({ message: 'Employee not found' });
+    
+    const currentUserRole = req.user?.role?.name || req.user?.role;
+    const targetEmployeeRole = employee.user?.role?.name;
+    
+    if (targetEmployeeRole === 'Owner' && currentUserRole !== 'Administrator' && currentUserRole !== 'Owner') {
+      return res.status(403).json({ message: 'Akses ditolak: Anda tidak memiliki wewenang untuk menghapus profil Owner.' });
+    }
+    
     // Soft delete employee and user, freeing up username for future reuse
     await prisma.$transaction(async (tx) => {
-      const employee = await tx.employee.update({
+      const deletedEmp = await tx.employee.update({
         where: { id },
         data: { deletedAt: new Date() },
         include: { user: true }
       });
 
-      const freedUsername = `${employee.user.username}_deleted_${Date.now()}`;
+      const freedUsername = `${deletedEmp.user.username}_deleted_${Date.now()}`;
       await tx.user.update({
-        where: { id: employee.userId },
+        where: { id: deletedEmp.userId },
         data: {
           deletedAt: new Date(),
           username: freedUsername
