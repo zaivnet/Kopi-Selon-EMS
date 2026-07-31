@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import {
   Activity,
@@ -10,6 +11,7 @@ import {
   Clock3,
   Coffee,
   FileBarChart2,
+  FileText,
   LogIn,
   LogOut,
   MessageSquareText,
@@ -155,6 +157,7 @@ function DashboardSkeleton() {
 
 export default function AdminDashboard() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const summaryQuery = useQuery<DashboardSummary>({
     queryKey: ['dashboard-summary'],
     queryFn: async () => (await api.get('/dashboard/summary')).data,
@@ -308,6 +311,24 @@ export default function AdminDashboard() {
     return result;
   }, [rosterQuery.data]);
 
+  const pendingRequestsQuery = useQuery({
+    queryKey: ['admin-dashboard-pending-requests'],
+    queryFn: async () => {
+      const res = await api.get('/requests?status=Pending');
+      return Array.isArray(res.data) ? res.data : [];
+    },
+    refetchInterval: 30_000
+  });
+
+  const companyQuery = useQuery({
+    queryKey: ['admin-dashboard-company'],
+    queryFn: async () => {
+      const res = await api.get('/company');
+      return res.data || null;
+    },
+    refetchInterval: 60_000
+  });
+
   if (summaryQuery.isLoading) return <DashboardSkeleton />;
 
   if (summaryQuery.isError || !summaryQuery.data) {
@@ -388,8 +409,8 @@ export default function AdminDashboard() {
               <Badge variant="success">Realtime</Badge>
             </div>
             <div className="flex flex-wrap items-center gap-2.5">
-              <Button size="md">Tambah Karyawan</Button>
-              <Button variant="secondary" size="md">Lihat Absensi</Button>
+              <Button size="md" onClick={() => navigate('/dashboard/employees')}>Tambah Karyawan</Button>
+              <Button variant="secondary" size="md" onClick={() => navigate('/dashboard/attendance-monitoring')}>Lihat Absensi</Button>
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-2xl border border-amber-500/15 bg-white/80 p-3.5 sm:p-4 shadow-sm dark:border-amber-900/30 dark:bg-[#1f1611]/80">
@@ -411,27 +432,40 @@ export default function AdminDashboard() {
           </div>
         </Card>
 
+        {/* Real Persetujuan Request Center */}
         <Card className="border-amber-500/20 bg-white dark:border-[#3a2b20] dark:bg-[#221812]">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="flex items-center gap-2 text-base sm:text-lg font-bold">
-              <CalendarDays className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-              Calendar Agenda
+              <FileText className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              Persetujuan Request Center
             </CardTitle>
-            <Badge variant="neutral">Agenda Toko</Badge>
+            <Badge variant="warning">{pendingRequestsQuery.data?.length || 0} Pending</Badge>
           </CardHeader>
-          <CardContent className="space-y-3 pt-2">
-            <div className="rounded-2xl border border-amber-500/15 bg-amber-500/5 p-3.5 dark:border-amber-900/30 dark:bg-amber-950/20">
-              <p className="text-xs sm:text-sm font-bold text-slate-800 dark:text-amber-100">Shift Puncak Kopi Selon</p>
-              <p className="mt-1 text-xs text-amber-700 dark:text-amber-300/70">08.00 - 17.00 WIB · 12 Barista & Crew</p>
-            </div>
-            <div className="rounded-2xl border border-amber-500/15 bg-amber-500/5 p-3.5 dark:border-amber-900/30 dark:bg-amber-950/20">
-              <p className="text-xs sm:text-sm font-bold text-slate-800 dark:text-amber-100">Rapat Evaluasi Shift</p>
-              <p className="mt-1 text-xs text-amber-700 dark:text-amber-300/70">14.00 WIB · Ruang Briefing</p>
-            </div>
-            <div className="rounded-2xl border border-amber-500/15 bg-amber-500/5 p-3.5 dark:border-amber-900/30 dark:bg-amber-950/20">
-              <p className="text-xs sm:text-sm font-bold text-slate-800 dark:text-amber-100">Pengumuman Target Bulanan</p>
-              <p className="mt-1 text-xs text-amber-700 dark:text-amber-300/70">Review target penjualan & kedisiplinan</p>
-            </div>
+          <CardContent className="space-y-3 pt-2 max-h-[300px] overflow-y-auto scrollbar-thin">
+            {pendingRequestsQuery.isLoading ? (
+              <div className="space-y-2">
+                {[0, 1].map((i) => (
+                  <div key={i} className="h-14 animate-pulse rounded-xl bg-amber-500/5 dark:bg-[#1f1611]/80" />
+                ))}
+              </div>
+            ) : pendingRequestsQuery.data?.length ? (
+              pendingRequestsQuery.data.slice(0, 3).map((req: any) => (
+                <div
+                  key={req.id}
+                  onClick={() => navigate('/dashboard/requests')}
+                  className="rounded-2xl border border-amber-500/15 bg-amber-500/5 p-3.5 cursor-pointer hover:bg-amber-500/10 transition-colors dark:border-amber-900/30 dark:bg-amber-950/20"
+                >
+                  <p className="text-xs sm:text-sm font-bold text-slate-800 dark:text-amber-100">
+                    {req.employee?.firstName} {req.employee?.lastName || ''}
+                  </p>
+                  <p className="mt-1 text-xs text-amber-700 dark:text-amber-300/70">
+                    {req.type === 'LEAVE' ? 'Cuti' : req.type === 'SICK_LEAVE' ? 'Sakit' : req.type === 'SWAP_SHIFT' ? 'Tukar Shift' : 'Izin'} · {dayjs(req.startDate).format('D MMM YYYY')}
+                  </p>
+                </div>
+              ))
+            ) : (
+              <EmptyState title="Semua request bersih" description="Tidak ada pengajuan cuti/izin yang perlu disetujui saat ini." />
+            )}
           </CardContent>
         </Card>
       </section>
@@ -518,14 +552,18 @@ export default function AdminDashboard() {
           </CardHeader>
           <CardContent className="grid gap-3">
             {[
-              { label: 'Tambah Karyawan', icon: UserPlus, description: 'Buat akun baru' },
-              { label: 'Tambah Shift', icon: PlusCircle, description: 'Atur jadwal' },
-              { label: 'Lihat Absensi', icon: FileBarChart2, description: 'Pantau harian' },
-              { label: 'Laporan', icon: Warehouse, description: 'Ekspor data' }
+              { label: 'Tambah Karyawan', icon: UserPlus, description: 'Buat akun baru', path: '/dashboard/employees' },
+              { label: 'Tambah Shift', icon: PlusCircle, description: 'Atur jadwal', path: '/dashboard/shifts' },
+              { label: 'Lihat Absensi', icon: FileBarChart2, description: 'Pantau harian', path: '/dashboard/attendance-monitoring' },
+              { label: 'Laporan', icon: Warehouse, description: 'Ekspor data', path: '/dashboard/reports' }
             ].map((item) => {
               const Icon = item.icon;
               return (
-                <button key={item.label} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900">
+                <button
+                  key={item.label}
+                  onClick={() => navigate(item.path)}
+                  className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 w-full"
+                >
                   <div className="flex items-center gap-3">
                     <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#F4E7D3] text-[#6F4E37] dark:bg-slate-800 dark:text-[#f4cda4]">
                       <Icon className="h-4 w-4" />
@@ -604,23 +642,38 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-amber-500/20 bg-white dark:border-[#3a2b20] dark:bg-[#221812]">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="flex items-center gap-2">
-                <MessageSquareText className="h-5 w-5 text-[#6F4E37]" />
-                Announcement
+              <CardTitle className="flex items-center gap-2 text-base sm:text-lg font-bold">
+                <Warehouse className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                Informasi Outlet
               </CardTitle>
-              <Badge variant="neutral">Today</Badge>
+              <Badge variant="neutral">Kopi Selon</Badge>
             </CardHeader>
-            <CardContent>
-              <Alert title="Pengumuman penting" description="Periksa laporan bulanan sebelum pukul 17.00." variant="default" icon={<Sparkles className="h-4 w-4" />} />
-              <div className="mt-3 flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-slate-900/70">
-                <Avatar name="Tim Ops" size="sm" />
-                <div>
-                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Tim Operasional</p>
-                  <p className="text-xs text-slate-500">Update terakhir 10 menit lalu</p>
+            <CardContent className="space-y-3 pt-2">
+              {companyQuery.isLoading ? (
+                <div className="space-y-2">
+                  <div className="h-10 animate-pulse rounded-xl bg-amber-500/5 dark:bg-[#1f1611]/80" />
+                  <div className="h-10 animate-pulse rounded-xl bg-amber-500/5 dark:bg-[#1f1611]/80" />
                 </div>
-              </div>
+              ) : companyQuery.data ? (
+                <div className="space-y-2.5 text-xs">
+                  <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-2.5 dark:border-slate-800 dark:bg-slate-900/50">
+                    <p className="font-bold text-slate-700 dark:text-amber-100">Nama Outlet</p>
+                    <p className="text-slate-500 dark:text-slate-400">{companyQuery.data.name || '-'}</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-2.5 dark:border-slate-800 dark:bg-slate-900/50">
+                    <p className="font-bold text-slate-700 dark:text-amber-100">Alamat</p>
+                    <p className="text-slate-500 dark:text-slate-400 leading-relaxed">{companyQuery.data.address || '-'}</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-2.5 dark:border-slate-800 dark:bg-slate-900/50">
+                    <p className="font-bold text-slate-700 dark:text-amber-100">Kontak</p>
+                    <p className="text-slate-500 dark:text-slate-400">{companyQuery.data.phone || '-'} · {companyQuery.data.email || '-'}</p>
+                  </div>
+                </div>
+              ) : (
+                <EmptyState title="Profil belum diatur" description="Silakan atur profil perusahaan di menu Profil Perusahaan." />
+              )}
             </CardContent>
           </Card>
         </div>
