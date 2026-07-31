@@ -126,9 +126,9 @@ export const createEmployee = async (req: AuthRequest, res: Response) => {
       }
     }
 
-    // Check if username exists
+    // Check if username exists among active users
     const existingUser = await prisma.user.findFirst({
-      where: { username: username.trim() }
+      where: { username: username.trim(), deletedAt: null }
     });
     if (existingUser) return res.status(400).json({ message: 'Username sudah digunakan' });
 
@@ -201,7 +201,8 @@ export const updateEmployee = async (req: AuthRequest, res: Response) => {
       const duplicateUser = await prisma.user.findFirst({
         where: {
           username: newUsername,
-          id: { not: employee.userId }
+          id: { not: employee.userId },
+          deletedAt: null
         }
       });
       if (duplicateUser) {
@@ -280,7 +281,7 @@ export const deleteEmployee = async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string;
     
-    // Soft delete
+    // Soft delete employee and user, freeing up username for future reuse
     await prisma.$transaction(async (tx) => {
       const employee = await tx.employee.update({
         where: { id },
@@ -288,9 +289,13 @@ export const deleteEmployee = async (req: AuthRequest, res: Response) => {
         include: { user: true }
       });
 
+      const freedUsername = `${employee.user.username}_deleted_${Date.now()}`;
       await tx.user.update({
         where: { id: employee.userId },
-        data: { deletedAt: new Date() }
+        data: {
+          deletedAt: new Date(),
+          username: freedUsername
+        }
       });
     });
 
