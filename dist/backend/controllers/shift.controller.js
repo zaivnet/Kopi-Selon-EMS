@@ -199,6 +199,13 @@ export const bulkSaveWorkSchedules = async (req, res) => {
         if (!Array.isArray(schedules) || schedules.length === 0) {
             return res.status(400).json({ message: 'Payload schedules harus berupa array yang tidak kosong.' });
         }
+        // Fetch valid active employees and active shifts
+        const [activeEmployees, activeShifts] = await Promise.all([
+            prisma.employee.findMany({ where: { deletedAt: null }, select: { id: true } }),
+            prisma.workShift.findMany({ where: { deletedAt: null }, select: { id: true } })
+        ]);
+        const validEmployeeIds = new Set(activeEmployees.map((e) => e.id));
+        const validShiftIds = new Set(activeShifts.map((s) => s.id));
         const employeeIdsSet = new Set();
         let minDate = null;
         let maxDate = null;
@@ -206,9 +213,12 @@ export const bulkSaveWorkSchedules = async (req, res) => {
         for (const item of schedules) {
             if (!item.employeeId || !item.date)
                 continue;
+            if (!validEmployeeIds.has(item.employeeId))
+                continue;
             employeeIdsSet.add(item.employeeId);
             const dateObj = new Date(item.date);
-            dateObj.setHours(0, 0, 0, 0);
+            if (isNaN(dateObj.getTime()))
+                continue;
             const dayStart = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate(), 0, 0, 0);
             const dayEnd = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate(), 23, 59, 59, 999);
             if (!minDate || dayStart < minDate)
@@ -216,12 +226,15 @@ export const bulkSaveWorkSchedules = async (req, res) => {
             if (!maxDate || dayEnd > maxDate)
                 maxDate = dayEnd;
             if (item.shiftId && typeof item.shiftId === 'string' && item.shiftId !== 'OFF' && item.shiftId.trim() !== '') {
-                newEntries.push({
-                    id: crypto.randomUUID(),
-                    employeeId: item.employeeId,
-                    shiftId: item.shiftId.trim(),
-                    date: dayStart
-                });
+                const cleanShiftId = item.shiftId.trim();
+                if (validShiftIds.has(cleanShiftId)) {
+                    newEntries.push({
+                        id: crypto.randomUUID(),
+                        employeeId: item.employeeId,
+                        shiftId: cleanShiftId,
+                        date: dayStart
+                    });
+                }
             }
         }
         const employeeIds = Array.from(employeeIdsSet);
