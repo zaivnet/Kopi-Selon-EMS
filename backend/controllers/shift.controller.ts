@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
+import crypto from 'crypto';
 import { prisma } from '../lib/prisma.js';
 import { HIDDEN_ROLES } from '../lib/constants.js';
 
@@ -216,47 +217,71 @@ export const bulkSaveWorkSchedules = async (req: Request, res: Response) => {
   try {
     const { schedules } = req.body;
 
-    if (!Array.isArray(schedules)) {
-      return res.status(400).json({ message: 'Payload schedules harus berupa array.' });
+    if (!Array.isArray(schedules) || schedules.length === 0) {
+      return res.status(400).json({ message: 'Payload schedules harus berupa array yang tidak kosong.' });
     }
 
-    const result = await prisma.$transaction(async (tx) => {
-      let updatedCount = 0;
+    const employeeIdsSet = new Set<string>();
+    let minDate: Date | null = null;
+    let maxDate: Date | null = null;
 
-      for (const item of schedules) {
-        if (!item.employeeId || !item.date) continue;
+    const newEntries: { id: string; employeeId: string; shiftId: string; date: Date }[] = [];
 
-        const dateObj = new Date(item.date);
-        dateObj.setHours(0, 0, 0, 0);
-        const dayStart = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate(), 0, 0, 0);
-        const dayEnd = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate(), 23, 59, 59);
+    for (const item of schedules) {
+      if (!item.employeeId || !item.date) continue;
+      employeeIdsSet.add(item.employeeId);
 
+      const dateObj = new Date(item.date);
+      dateObj.setHours(0, 0, 0, 0);
+
+      const dayStart = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate(), 0, 0, 0);
+      const dayEnd = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate(), 23, 59, 59, 999);
+
+      if (!minDate || dayStart < minDate) minDate = dayStart;
+      if (!maxDate || dayEnd > maxDate) maxDate = dayEnd;
+
+      if (item.shiftId && typeof item.shiftId === 'string' && item.shiftId !== 'OFF' && item.shiftId.trim() !== '') {
+        newEntries.push({
+          id: crypto.randomUUID(),
+          employeeId: item.employeeId,
+          shiftId: item.shiftId.trim(),
+          date: dayStart
+        });
+      }
+    }
+
+    const employeeIds = Array.from(employeeIdsSet);
+
+    if (employeeIds.length === 0 || !minDate || !maxDate) {
+      return res.json({ message: 'Tidak ada data jadwal valid untuk disimpan.', count: 0 });
+    }
+
+    const result = await prisma.$transaction(
+      async (tx) => {
+        // 1. Delete all existing work schedules for these employees within the date range in 1 batch query
         await tx.workSchedule.deleteMany({
           where: {
-            employeeId: item.employeeId,
-            date: { gte: dayStart, lte: dayEnd }
+            employeeId: { in: employeeIds },
+            date: { gte: minDate!, lte: maxDate! }
           }
         });
 
-        if (item.shiftId && typeof item.shiftId === 'string' && item.shiftId !== 'OFF' && item.shiftId.trim() !== '') {
-          await tx.workSchedule.create({
-            data: {
-              employeeId: item.employeeId,
-              shiftId: item.shiftId.trim(),
-              date: dayStart
-            }
+        // 2. Insert all new work schedules in 1 batch query
+        if (newEntries.length > 0) {
+          await tx.workSchedule.createMany({
+            data: newEntries
           });
-          updatedCount++;
         }
-      }
 
-      return updatedCount;
-    });
+        return newEntries.length;
+      },
+      { timeout: 20000 }
+    );
 
     res.json({ message: 'Roster matriks berhasil disimpan.', count: result });
-  } catch (error) {
+  } catch (error: any) {
     console.error('bulkSaveWorkSchedules Error:', error);
-    res.status(500).json({ message: 'Gagal menyimpan roster matriks.' });
+    res.status(500).json({ message: error?.message || 'Gagal menyimpan roster matriks.' });
   }
 };
 
