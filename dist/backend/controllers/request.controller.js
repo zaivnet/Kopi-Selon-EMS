@@ -156,7 +156,7 @@ export const createRequest = async (req, res) => {
         const userId = req.user?.id;
         const requesterEmployee = await prisma.employee.findFirst({
             where: { userId, deletedAt: null },
-            include: { shift: true },
+            include: { shift: true, user: { include: { role: true } } },
         });
         if (!requesterEmployee) {
             return res.status(400).json({ message: 'Profil karyawan tidak ditemukan untuk akun ini.' });
@@ -192,11 +192,21 @@ export const createRequest = async (req, res) => {
             initialStatus = 'Draft';
         }
         else if (type === 'SWAP_SHIFT') {
+            if (requesterEmployee.user?.role?.name !== 'Karyawan') {
+                return res.status(403).json({ message: 'Hanya karyawan dengan role Karyawan yang dapat mengajukan tukar shift.' });
+            }
             if (!targetEmployeeId) {
                 return res.status(400).json({ message: 'Rekan kerja wajib dipilih untuk Tukar Shift.' });
             }
             if (targetEmployeeId === requesterEmployee.id) {
                 return res.status(400).json({ message: 'Tidak dapat menukar shift dengan diri sendiri.' });
+            }
+            const targetEmployee = await prisma.employee.findFirst({
+                where: { id: targetEmployeeId, deletedAt: null },
+                include: { user: { include: { role: true } } },
+            });
+            if (!targetEmployee || targetEmployee.user?.role?.name !== 'Karyawan') {
+                return res.status(400).json({ message: 'Rekan kerja yang diajak tukar shift harus memiliki role Karyawan.' });
             }
             initialStatus = 'Waiting Employee Approval';
             peerStatus = 'PENDING';
@@ -730,21 +740,29 @@ export const getEligibleSwapPeers = async (req, res) => {
         const userId = req.user?.id;
         const currentEmployee = await prisma.employee.findFirst({
             where: { userId, deletedAt: null },
-            include: { shift: true },
+            include: { shift: true, user: { include: { role: true } } },
         });
         if (!currentEmployee) {
             return res.status(400).json({ message: 'Profil karyawan tidak ditemukan.' });
+        }
+        if (currentEmployee.user?.role?.name !== 'Karyawan') {
+            return res.status(403).json({ message: 'Hanya karyawan dengan role Karyawan yang dapat melakukan tukar shift.' });
         }
         const { date } = req.query;
         const targetDate = date ? new Date(date) : new Date();
         const dateStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 0, 0, 0, 0);
         const dateEnd = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 23, 59, 59, 999);
-        // 1. Fetch active employees except current user
+        // 1. Fetch active employees except current user (with Karyawan role only)
         const activeEmployees = await prisma.employee.findMany({
             where: {
                 id: { not: currentEmployee.id },
                 status: 'ACTIVE',
                 deletedAt: null,
+                user: {
+                    role: {
+                        name: 'Karyawan',
+                    },
+                },
             },
             include: {
                 shift: true,
