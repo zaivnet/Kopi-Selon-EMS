@@ -1,5 +1,7 @@
+import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
+import dayjs from 'dayjs';
 import {
   Activity,
   AlertCircle,
@@ -13,6 +15,7 @@ import {
   Workflow
 } from 'lucide-react';
 import api from '@/lib/api';
+import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge, Button, EmptyState } from '@/components/ui/design-system';
 import { useAuth } from '@/context/AuthContext';
@@ -60,6 +63,143 @@ export default function StaffDashboard() {
     queryFn: async () => (await api.get('/dashboard/summary')).data,
     refetchInterval: 30_000
   });
+
+  const [activeTab, setActiveTab] = useState<'today' | 'tomorrow' | 'lusa'>('today');
+
+  const rosterQuery = useQuery({
+    queryKey: ['staff-dashboard-3day-roster'],
+    queryFn: async () => {
+      const todayObj = new Date();
+      const startStr = dayjs(todayObj).format('YYYY-MM-DD');
+      const endStr = dayjs(todayObj).add(3, 'day').format('YYYY-MM-DD');
+
+      const [empRes, shiftRes, schRes] = await Promise.all([
+        api.get('/employees').catch(() => ({ data: [] })),
+        api.get('/shifts').catch(() => ({ data: [] })),
+        api.get(`/shifts/schedules?startDate=${startStr}&endDate=${endStr}`).catch(() => ({ data: [] }))
+      ]);
+
+      return {
+        employees: Array.isArray(empRes.data) ? empRes.data : [],
+        shifts: Array.isArray(shiftRes.data) ? shiftRes.data : [],
+        schedules: Array.isArray(schRes.data) ? schRes.data : []
+      };
+    },
+    refetchInterval: 30_000
+  });
+
+  const threeDaysData = useMemo(() => {
+    if (!rosterQuery.data) return { today: null, tomorrow: null, lusa: null };
+    const { employees, shifts, schedules } = rosterQuery.data;
+
+    const baseToday = dayjs();
+    const days = [
+      { key: 'today' as const, label: 'Hari Ini', date: baseToday },
+      { key: 'tomorrow' as const, label: 'Besok', date: baseToday.add(1, 'day') },
+      { key: 'lusa' as const, label: 'Lusa', date: baseToday.add(2, 'day') }
+    ];
+
+    const workerEmployees = employees.filter((emp: any) => {
+      const roleName = emp.user?.role?.name;
+      return !roleName || roleName === 'Karyawan';
+    });
+
+    const result: Record<'today' | 'tomorrow' | 'lusa', any> = {
+      today: null,
+      tomorrow: null,
+      lusa: null
+    };
+
+    days.forEach((d) => {
+      const targetDateStr = d.date.format('YYYY-MM-DD');
+      const targetTime = d.date.toDate().getTime();
+
+      const shiftGroups: Record<string, any[]> = {};
+      shifts.forEach((s: any) => {
+        shiftGroups[s.id] = [];
+      });
+      shiftGroups['OFF'] = [];
+
+      workerEmployees.forEach((emp: any) => {
+        let leaveTag = null;
+
+        // Approved Leaves
+        if (Array.isArray(emp.leaves)) {
+          const matchLeave = emp.leaves.find((l: any) => {
+            if (!l.startDate) return false;
+            const sTime = new Date(l.startDate).setHours(0, 0, 0, 0);
+            const eTime = l.endDate ? new Date(l.endDate).setHours(23, 59, 59, 999) : sTime;
+            return targetTime >= sTime && targetTime <= eTime;
+          });
+          if (matchLeave) {
+            leaveTag = matchLeave.type === 'SICK' ? 'Sakit' : 'Cuti';
+          }
+        }
+
+        // Approved Permissions
+        if (!leaveTag && Array.isArray(emp.permissions)) {
+          const matchPerm = emp.permissions.find((p: any) => {
+            if (!p.date) return false;
+            return dayjs(p.date).format('YYYY-MM-DD') === targetDateStr;
+          });
+          if (matchPerm) {
+            leaveTag = 'Izin';
+          }
+        }
+
+        if (leaveTag) {
+          shiftGroups['OFF'].push({ ...emp, statusTag: leaveTag });
+          return;
+        }
+
+        // WorkSchedule from Roster Matrix
+        const empSchedules = Array.isArray(emp.workSchedules) ? emp.workSchedules : [];
+        const matchSchedule =
+          schedules.find((sch: any) => sch.employeeId === emp.id && dayjs(sch.date).format('YYYY-MM-DD') === targetDateStr) ||
+          empSchedules.find((sch: any) => dayjs(sch.date).format('YYYY-MM-DD') === targetDateStr);
+
+        if (matchSchedule) {
+          if (matchSchedule.shiftId && matchSchedule.shiftId !== 'OFF' && shiftGroups[matchSchedule.shiftId]) {
+            shiftGroups[matchSchedule.shiftId].push(emp);
+          } else {
+            shiftGroups['OFF'].push({ ...emp, statusTag: 'Libur (OFF)' });
+          }
+          return;
+        }
+
+        // Default Master Shift
+        if (emp.shiftId && shiftGroups[emp.shiftId]) {
+          shiftGroups[emp.shiftId].push(emp);
+        } else if (emp.shift?.id && shiftGroups[emp.shift.id]) {
+          shiftGroups[emp.shift.id].push(emp);
+        } else {
+          shiftGroups['OFF'].push({ ...emp, statusTag: 'Libur (OFF)' });
+        }
+      });
+
+      const shiftList = shifts.map((s: any) => ({
+        shiftId: s.id,
+        shiftName: s.name,
+        shiftTime: `${s.startTime} - ${s.endTime}`,
+        members: shiftGroups[s.id] || []
+      }));
+
+      shiftList.push({
+        shiftId: 'OFF',
+        shiftName: '⛔ Libur / Off',
+        shiftTime: 'Off',
+        members: shiftGroups['OFF'] || []
+      });
+
+      result[d.key] = {
+        label: d.label,
+        formattedDate: d.date.format('dddd, D MMMM YYYY'),
+        shifts: shiftList
+      };
+    });
+
+    return result;
+  }, [rosterQuery.data]);
 
   if (summaryQuery.isLoading) {
     return (
@@ -180,30 +320,87 @@ export default function StaffDashboard() {
           </CardContent>
         </Card>
 
-        {/* Today's Shift Assignments */}
+        {/* 3-Day Shift Assignments */}
         <Card className="border-amber-500/20 bg-white dark:border-[#3a2b20] dark:bg-[#221812]">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardHeader className="flex flex-col sm:flex-row sm:items-start justify-between pb-2 gap-2">
             <div>
-              <CardTitle className="text-lg font-bold text-slate-900 dark:text-amber-100">Jadwal Shift Toko Hari Ini</CardTitle>
-              <p className="mt-1 text-xs text-slate-500 dark:text-amber-300/60">Roster shift resmi karyawan</p>
+              <CardTitle className="text-lg font-bold text-slate-900 dark:text-amber-100">Jadwal Shift Toko (3 Hari)</CardTitle>
+              <p className="mt-1 text-xs text-slate-500 dark:text-amber-300/60">Hari Ini, Besok & Lusa (khusus Karyawan)</p>
             </div>
-            <Badge variant="neutral">{summary.todayShifts.length} Penugasan</Badge>
+            
+            {/* Elegant Tabs */}
+            <div className="flex rounded-xl bg-slate-100 p-1 dark:bg-slate-800 shrink-0">
+              {(['today', 'tomorrow', 'lusa'] as const).map((key) => (
+                <button
+                  key={key}
+                  onClick={() => setActiveTab(key)}
+                  className={cn(
+                    'rounded-lg px-2.5 py-1 text-xs font-bold transition-all',
+                    activeTab === key
+                      ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-amber-100'
+                      : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+                  )}
+                >
+                  {key === 'today' ? 'Hari Ini' : key === 'tomorrow' ? 'Besok' : 'Lusa'}
+                </button>
+              ))}
+            </div>
           </CardHeader>
-          <CardContent className="space-y-3 pt-2">
-            {summary.todayShifts.length ? (
-              summary.todayShifts.map((shift) => (
-                <div key={shift.employeeId} className="flex items-center justify-between rounded-xl border border-amber-500/15 bg-amber-500/5 p-3 dark:border-amber-900/20 dark:bg-amber-950/10">
-                  <div>
-                    <p className="text-xs font-bold text-slate-900 dark:text-amber-100">{shift.employeeName}</p>
-                    <p className="text-[11px] text-slate-500 dark:text-amber-300/70">{shift.shift.name}: {shift.shift.startTime} - {shift.shift.endTime}</p>
+          <CardContent className="space-y-3 pt-2 max-h-[380px] overflow-y-auto scrollbar-thin">
+            {rosterQuery.isLoading ? (
+              <div className="space-y-2">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="h-16 animate-pulse rounded-xl bg-amber-500/5 dark:bg-amber-950/20" />
+                ))}
+              </div>
+            ) : threeDaysData[activeTab] ? (
+              <div className="space-y-3">
+                <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-400">
+                  🗓️ {threeDaysData[activeTab].formattedDate}
+                </p>
+                {threeDaysData[activeTab].shifts.map((group: any) => (
+                  <div
+                    key={group.shiftId}
+                    className={cn(
+                      'rounded-xl p-3 border text-xs',
+                      group.shiftId === 'OFF'
+                        ? 'bg-slate-50 border-slate-200/70 dark:bg-slate-900/50 dark:border-slate-800'
+                        : 'bg-amber-500/5 border-amber-500/15 dark:bg-amber-950/30 dark:border-amber-900/40'
+                    )}
+                  >
+                    <div className="flex items-center justify-between font-bold text-slate-800 dark:text-amber-100 pb-1.5 border-b border-slate-200/60 dark:border-slate-800">
+                      <span>{group.shiftName}</span>
+                      <span className="text-[10px] font-mono text-amber-700 dark:text-amber-400 shrink-0 ml-1">
+                        {group.shiftTime} ({group.members.length})
+                      </span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {group.members.length === 0 ? (
+                        <span className="text-[10px] italic text-slate-400">Tidak ada penugasan</span>
+                      ) : (
+                        group.members.map((m: any) => (
+                          <span
+                            key={m.id}
+                            className="inline-flex items-center gap-1 rounded-lg bg-white px-2 py-1 text-[11px] font-semibold text-slate-800 shadow-sm border border-slate-200/70 dark:bg-slate-800 dark:text-amber-100 dark:border-slate-700"
+                          >
+                            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-amber-500/20 text-[9px] font-bold text-amber-900 dark:text-amber-200">
+                              {m.firstName.charAt(0)}
+                            </span>
+                            <span>{m.firstName} {m.lastName || ''}</span>
+                            {m.statusTag && (
+                              <span className="text-[9px] font-extrabold text-amber-600 dark:text-amber-400">
+                                ({m.statusTag})
+                              </span>
+                            )}
+                          </span>
+                        ))
+                      )}
+                    </div>
                   </div>
-                  <Badge variant={shift.status === 'WORKING' ? 'success' : shift.status === 'COMPLETED' ? 'info' : shift.status === 'ABSENT' ? 'danger' : 'neutral'}>
-                    {shift.status}
-                  </Badge>
-                </div>
-              ))
+                ))}
+              </div>
             ) : (
-              <EmptyState title="Belum ada penugasan shift" description="Atur jadwal shift melalui menu Penugasan Shift." />
+              <EmptyState title="Belum ada penugasan" description="Jadwal untuk hari ini belum diatur." />
             )}
           </CardContent>
         </Card>
