@@ -77,9 +77,9 @@ export default function EmployeePortalDashboard() {
       const endStr = dayjs(todayObj).add(3, 'day').format('YYYY-MM-DD');
 
       const [empRes, shiftRes, schRes] = await Promise.all([
-        api.get('/employees'),
-        api.get('/shifts'),
-        api.get(`/shifts/schedules?startDate=${startStr}&endDate=${endStr}`)
+        api.get('/employees').catch(() => ({ data: [] })),
+        api.get('/shifts').catch(() => ({ data: [] })),
+        api.get(`/shifts/schedules?startDate=${startStr}&endDate=${endStr}`).catch(() => ({ data: [] }))
       ]);
 
       return {

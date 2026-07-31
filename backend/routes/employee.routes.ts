@@ -30,7 +30,7 @@ const upload = multer({ storage: storage });
 router.use(authenticate);
 
 router.get('/me', getMyEmployeeProfile);
-router.get('/', authorizePermission('employee.view'), getEmployees);
+router.get('/', authorizePermission('employee.view', 'shift.view', 'dashboard.view'), getEmployees);
 router.get('/:id', authorizePermission('employee.view'), getEmployee);
 router.post('/', authorizePermission('employee.create'), createEmployee);
 router.put('/:id', authorizePermission('employee.edit'), updateEmployee);

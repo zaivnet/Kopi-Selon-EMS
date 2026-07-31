@@ -6,8 +6,8 @@ const router = Router();
 
 router.use(authenticate);
 
-router.get('/', authorizePermission('shift.view'), getShifts);
-router.get('/schedules', authorizePermission('shift.view'), getWorkSchedules);
+router.get('/', authorizePermission('shift.view', 'dashboard.view'), getShifts);
+router.get('/schedules', authorizePermission('shift.view', 'dashboard.view'), getWorkSchedules);
 router.post('/schedules/bulk', authorizePermission('shift.edit', 'shift.create'), bulkSaveWorkSchedules);
 router.post('/', authorizePermission('shift.create'), createShift);
 router.post('/assign', authorizePermission('shift.edit'), assignShift);
