@@ -149,10 +149,11 @@ export default function EmployeePortalDashboard() {
           return;
         }
 
-        // WorkSchedule from Roster Matrix
-        const matchSchedule = schedules.find((sch: any) => {
-          return sch.employeeId === emp.id && dayjs(sch.date).format('YYYY-MM-DD') === targetDateStr;
-        });
+        // WorkSchedule set by Admin/Staff via Roster Matrix Builder
+        const empSchedules = Array.isArray(emp.workSchedules) ? emp.workSchedules : [];
+        const matchSchedule =
+          schedules.find((sch: any) => sch.employeeId === emp.id && dayjs(sch.date).format('YYYY-MM-DD') === targetDateStr) ||
+          empSchedules.find((sch: any) => dayjs(sch.date).format('YYYY-MM-DD') === targetDateStr);
 
         if (matchSchedule) {
           if (matchSchedule.shiftId && matchSchedule.shiftId !== 'OFF' && shiftGroups[matchSchedule.shiftId]) {
