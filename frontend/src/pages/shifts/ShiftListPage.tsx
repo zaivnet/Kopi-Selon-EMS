@@ -141,7 +141,10 @@ export default function ShiftListPage() {
         <AssignShiftModal
           shifts={shifts}
           onClose={() => setIsAssignOpen(false)}
-          onSuccess={() => refetchAll()}
+          onSuccess={() => {
+            setIsAssignOpen(false);
+            refetchAll();
+          }}
         />
       )}
     </div>

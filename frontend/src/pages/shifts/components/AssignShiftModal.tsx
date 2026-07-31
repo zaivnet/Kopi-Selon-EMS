@@ -158,6 +158,7 @@ export default function AssignShiftModal({ shifts, onClose, onSuccess }: Props) 
       await queryClient.invalidateQueries({ queryKey: ['shifts'] });
       await queryClient.invalidateQueries({ queryKey: ['employees'] });
       await onSuccess();
+      onClose();
     } catch (error: any) {
       setFeedback({
         type: 'error',
