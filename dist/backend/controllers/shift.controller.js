@@ -152,10 +152,16 @@ export const assignShift = async (req, res) => {
 };
 export const getWorkSchedules = async (req, res) => {
     try {
-        const { month, year } = req.query;
+        const { month, year, startDate: reqStart, endDate: reqEnd } = req.query;
         let startDate;
         let endDate;
-        if (month && typeof month === 'string' && month.includes('-')) {
+        if (reqStart && reqEnd && typeof reqStart === 'string' && typeof reqEnd === 'string') {
+            startDate = new Date(reqStart);
+            startDate.setHours(0, 0, 0, 0);
+            endDate = new Date(reqEnd);
+            endDate.setHours(23, 59, 59, 999);
+        }
+        else if (month && typeof month === 'string' && month.includes('-')) {
             const [y, m] = month.split('-').map(Number);
             startDate = new Date(y, m - 1, 1, 0, 0, 0);
             endDate = new Date(y, m, 0, 23, 59, 59);

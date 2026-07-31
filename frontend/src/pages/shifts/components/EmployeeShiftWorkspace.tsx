@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '@/lib/api';
+import dayjs from 'dayjs';
 import {
   CalendarClock,
   Clock,
@@ -13,6 +14,7 @@ import {
   ChevronLeft,
   ChevronRight,
   User,
+  Users,
   Sparkles,
   TrendingUp,
   X,
@@ -43,6 +45,12 @@ export default function EmployeeShiftWorkspace({ user }: EmployeeShiftWorkspaceP
   const [peerToastMessage, setPeerToastMessage] = useState<string | null>(null);
   const [isRequestDrawerOpen, setIsRequestDrawerOpen] = useState(false);
   const [drawerType, setDrawerType] = useState<RequestDrawerType>('PERMISSION');
+
+  const [allEmployees, setAllEmployees] = useState<any[]>([]);
+  const [allShifts, setAllShifts] = useState<any[]>([]);
+  const [teamSchedules, setTeamSchedules] = useState<any[]>([]);
+  const [selectedRosterDayIndex, setSelectedRosterDayIndex] = useState<number>(0);
+  const [rosterSearchQuery, setRosterSearchQuery] = useState<string>('');
 
   const openDrawer = (type: RequestDrawerType) => {
     setDrawerType(type);
@@ -75,6 +83,30 @@ export default function EmployeeShiftWorkspace({ user }: EmployeeShiftWorkspaceP
         setPendingPeerSwaps(Array.isArray(reqRes.data) ? reqRes.data : []);
       } catch {
         setPendingPeerSwaps([]);
+      }
+
+      // 4. Fetch all employees & shifts for Team Roster view
+      try {
+        const [empRes, shiftRes] = await Promise.all([
+          api.get('/employees'),
+          api.get('/shifts')
+        ]);
+        setAllEmployees(Array.isArray(empRes.data) ? empRes.data : []);
+        setAllShifts(Array.isArray(shiftRes.data) ? shiftRes.data : []);
+      } catch {
+        setAllEmployees([]);
+        setAllShifts([]);
+      }
+
+      // 5. Fetch 7-day team WorkSchedules from Roster Matrix
+      try {
+        const todayObj = new Date();
+        const startStr = dayjs(todayObj).format('YYYY-MM-DD');
+        const endStr = dayjs(todayObj).add(7, 'day').format('YYYY-MM-DD');
+        const schRes = await api.get(`/shifts/schedules?startDate=${startStr}&endDate=${endStr}`);
+        setTeamSchedules(Array.isArray(schRes.data) ? schRes.data : []);
+      } catch {
+        setTeamSchedules([]);
       }
     } catch (err) {
       console.error('Error loading employee workspace data:', err);
@@ -172,6 +204,126 @@ export default function EmployeeShiftWorkspace({ user }: EmployeeShiftWorkspaceP
 
     return null;
   };
+
+  // Generate 7 days items starting from today for Team Roster
+  const roster7Days = React.useMemo(() => {
+    const days = [];
+    const baseToday = dayjs();
+    for (let i = 0; i < 7; i++) {
+      const d = baseToday.add(i, 'day');
+      days.push({
+        index: i,
+        dateObj: d.toDate(),
+        dateStr: d.format('YYYY-MM-DD'),
+        label: i === 0 ? 'Hari Ini' : i === 1 ? 'Besok' : d.format('dddd'),
+        formattedDate: d.format('DD MMM'),
+        isToday: i === 0
+      });
+    }
+    return days;
+  }, []);
+
+  // Compute team shift assignments for the selected roster day
+  const selectedDayShifts = React.useMemo(() => {
+    const selectedDay = roster7Days[selectedRosterDayIndex] || roster7Days[0];
+    if (!selectedDay) return [];
+
+    const targetDateStr = selectedDay.dateStr;
+    const targetDateObj = selectedDay.dateObj;
+    const targetTime = targetDateObj.getTime();
+
+    // Filter active worker employees (Karyawan & Staff)
+    const filteredEmps = allEmployees.filter((emp) => {
+      const roleName = emp.user?.role?.name;
+      const isWorker = !roleName || ['Karyawan', 'Staff'].includes(roleName);
+      if (!isWorker) return false;
+
+      if (!rosterSearchQuery.trim()) return true;
+      const fullName = `${emp.firstName || ''} ${emp.lastName || ''}`.toLowerCase();
+      return fullName.includes(rosterSearchQuery.toLowerCase().trim());
+    });
+
+    // Group members by shiftId
+    const shiftGroups: Record<string, any[]> = {};
+    allShifts.forEach((s) => {
+      shiftGroups[s.id] = [];
+    });
+    shiftGroups['OFF'] = [];
+
+    filteredEmps.forEach((emp) => {
+      let leaveTag = null;
+
+      // 1. Approved Leaves
+      if (Array.isArray(emp.leaves)) {
+        const matchLeave = emp.leaves.find((l: any) => {
+          if (!l.startDate) return false;
+          const sTime = new Date(l.startDate).setHours(0, 0, 0, 0);
+          const eTime = l.endDate ? new Date(l.endDate).setHours(23, 59, 59, 999) : sTime;
+          return targetTime >= sTime && targetTime <= eTime;
+        });
+        if (matchLeave) {
+          leaveTag = matchLeave.type === 'SICK' ? 'Sakit' : 'Cuti';
+        }
+      }
+
+      // 2. Approved Permissions
+      if (!leaveTag && Array.isArray(emp.permissions)) {
+        const matchPerm = emp.permissions.find((p: any) => {
+          if (!p.date) return false;
+          return dayjs(p.date).format('YYYY-MM-DD') === targetDateStr;
+        });
+        if (matchPerm) {
+          leaveTag = 'Izin';
+        }
+      }
+
+      if (leaveTag) {
+        shiftGroups['OFF'].push({ ...emp, statusTag: leaveTag });
+        return;
+      }
+
+      // 3. WorkSchedule entry from Roster Matrix
+      const matchSchedule = teamSchedules.find((sch: any) => {
+        return sch.employeeId === emp.id && dayjs(sch.date).format('YYYY-MM-DD') === targetDateStr;
+      });
+
+      if (matchSchedule) {
+        if (matchSchedule.shiftId && matchSchedule.shiftId !== 'OFF' && shiftGroups[matchSchedule.shiftId]) {
+          shiftGroups[matchSchedule.shiftId].push(emp);
+        } else {
+          shiftGroups['OFF'].push({ ...emp, statusTag: 'Libur (OFF)' });
+        }
+        return;
+      }
+
+      // 4. Default Base Shift fallback
+      if (emp.shiftId && shiftGroups[emp.shiftId]) {
+        shiftGroups[emp.shiftId].push(emp);
+      } else if (emp.shift?.id && shiftGroups[emp.shift.id]) {
+        shiftGroups[emp.shift.id].push(emp);
+      } else {
+        shiftGroups['OFF'].push({ ...emp, statusTag: 'Libur (OFF)' });
+      }
+    });
+
+    const result = allShifts.map((s) => ({
+      shiftId: s.id,
+      shiftName: s.name,
+      shiftTime: `${s.startTime} - ${s.endTime} WIB`,
+      isOff: false,
+      members: shiftGroups[s.id] || []
+    }));
+
+    result.push({
+      shiftId: 'OFF',
+      shiftName: '⛔ Libur / Cuti (OFF)',
+      shiftTime: 'Tidak Bertugas',
+      isOff: true,
+      members: shiftGroups['OFF'] || []
+    });
+
+    return result;
+  }, [allEmployees, allShifts, teamSchedules, roster7Days, selectedRosterDayIndex, rosterSearchQuery]);
 
   const today = new Date();
   const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
@@ -555,6 +707,126 @@ export default function EmployeeShiftWorkspace({ user }: EmployeeShiftWorkspaceP
                   {d.shiftName}
                 </span>
                 <span className="block text-[9px] font-mono text-slate-400">{d.shiftTime}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* TEAM ROSTER: SIAPA BERTUGAS HARI INI, BESOK, & SEMINGGU KE DEPAN */}
+      <div className="rounded-3xl border border-slate-200/80 bg-white/80 p-6 shadow-sm backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/70 space-y-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-4 dark:border-slate-800">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-md shadow-indigo-600/30">
+              <Users className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-base font-extrabold text-slate-800 dark:text-amber-100 flex items-center gap-2">
+                Jadwal Penugasan Rekan Kerja (7 Hari Ke Depan)
+                <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-[10px] font-bold text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300">
+                  Roster Tim Store
+                </span>
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Pantau siapa saja rekan kerja bertugas hari ini, besok, dan seminggu ke depan dari Roster Matriks Admin.
+              </p>
+            </div>
+          </div>
+
+          <div className="relative max-w-xs w-full">
+            <input
+              type="text"
+              placeholder="Cari nama rekan kerja..."
+              value={rosterSearchQuery}
+              onChange={(e) => setRosterSearchQuery(e.target.value)}
+              className="flex h-9 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 pl-8 text-xs font-medium transition focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+            />
+            <User className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+          </div>
+        </div>
+
+        {/* 7-DAY INTERACTIVE TABS */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+          {roster7Days.map((dayItem, idx) => {
+            const isSelected = selectedRosterDayIndex === idx;
+            return (
+              <button
+                key={dayItem.dateStr}
+                type="button"
+                onClick={() => setSelectedRosterDayIndex(idx)}
+                className={cn(
+                  'flex shrink-0 items-center gap-2 rounded-2xl border px-3.5 py-2 text-xs font-bold transition-all cursor-pointer',
+                  isSelected
+                    ? 'border-indigo-600 bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                    : dayItem.isToday
+                    ? 'border-amber-500/50 bg-amber-500/10 text-amber-900 dark:text-amber-300'
+                    : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300'
+                )}
+              >
+                <span>{dayItem.label}</span>
+                <span className={cn('text-[10px] opacity-80', isSelected ? 'text-indigo-100' : 'text-slate-500')}>
+                  {dayItem.formattedDate}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* SHIFT CARDS & TEAM MEMBERS FOR SELECTED DAY */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-1">
+          {selectedDayShifts.map((group) => (
+            <div
+              key={group.shiftId}
+              className={cn(
+                'rounded-2xl border p-4 transition-all',
+                group.isOff
+                  ? 'border-slate-200/80 bg-slate-50/50 dark:border-slate-800 dark:bg-slate-950/40'
+                  : 'border-indigo-100 bg-gradient-to-br from-indigo-50/40 via-white to-white shadow-sm dark:border-indigo-950 dark:from-slate-900 dark:to-slate-900'
+              )}
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
+                <div>
+                  <h4 className="text-sm font-extrabold text-slate-800 dark:text-slate-100">{group.shiftName}</h4>
+                  <p className="text-[11px] font-mono text-indigo-600 dark:text-indigo-400 mt-0.5">{group.shiftTime}</p>
+                </div>
+                <span className={cn(
+                  'rounded-xl px-2.5 py-1 text-xs font-bold',
+                  group.isOff
+                    ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300'
+                    : 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300'
+                )}>
+                  {group.members.length} Rekan
+                </span>
+              </div>
+
+              <div className="mt-3.5 space-y-2 max-h-60 overflow-y-auto pr-1">
+                {group.members.length === 0 ? (
+                  <p className="text-xs italic text-slate-400 py-2 text-center">Tidak ada karyawan pada shift ini.</p>
+                ) : (
+                  group.members.map((member: any) => (
+                    <div
+                      key={member.id}
+                      className="flex items-center justify-between rounded-xl bg-white p-2.5 border border-slate-100 shadow-sm dark:bg-slate-800 dark:border-slate-700/60"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700 font-extrabold text-xs dark:bg-indigo-950/80 dark:text-indigo-300">
+                          {member.firstName.charAt(0)}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">
+                            {member.firstName} {member.lastName || ''}
+                          </p>
+                          <p className="text-[10px] text-slate-400 truncate">{member.user?.role?.name || 'Karyawan'}</p>
+                        </div>
+                      </div>
+                      {member.statusTag && (
+                        <span className="shrink-0 rounded-md bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                          {member.statusTag}
+                        </span>
+                      )}
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           ))}

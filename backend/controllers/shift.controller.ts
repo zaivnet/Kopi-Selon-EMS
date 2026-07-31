@@ -56,16 +56,16 @@ export const updateShift = async (req: Request, res: Response) => {
 export const deleteShift = async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
-    
+
     const shift = await prisma.workShift.findUnique({
       where: { id },
       include: { employees: { where: { deletedAt: null } } }
     });
-    
+
     if (shift && shift.employees.length > 0) {
       return res.status(400).json({ message: 'Tidak dapat menghapus shift yang masih memiliki karyawan' });
     }
-    
+
     await prisma.workShift.update({
       where: { id },
       data: { deletedAt: new Date() }
@@ -114,17 +114,17 @@ export const assignShift = async (req: Request, res: Response) => {
     const eligibleEmployees = normalizedEmployeeIds.length === 0
       ? []
       : await prisma.employee.findMany({
-          where: {
-            id: { in: normalizedEmployeeIds },
+        where: {
+          id: { in: normalizedEmployeeIds },
+          deletedAt: null,
+          status: 'ACTIVE',
+          user: {
             deletedAt: null,
-            status: 'ACTIVE',
-            user: {
-              deletedAt: null,
-              role: { name: { in: ['Karyawan', 'Staff'] }, deletedAt: null }
-            }
-          },
-          select: { id: true }
-        });
+            role: { name: { in: ['Karyawan', 'Staff'] }, deletedAt: null }
+          }
+        },
+        select: { id: true }
+      });
 
     const eligibleIds = new Set(eligibleEmployees.map((employee) => employee.id));
     const rejectedIds = normalizedEmployeeIds.filter((id) => !eligibleIds.has(id));
@@ -148,9 +148,9 @@ export const assignShift = async (req: Request, res: Response) => {
       const assigned = normalizedEmployeeIds.length === 0
         ? { count: 0 }
         : await tx.employee.updateMany({
-            where: { id: { in: normalizedEmployeeIds } },
-            data: { shiftId: shift.id }
-          });
+          where: { id: { in: normalizedEmployeeIds } },
+          data: { shiftId: shift.id }
+        });
 
       return { assigned: assigned.count, unassigned: unassigned.count };
     });
@@ -171,11 +171,16 @@ export const assignShift = async (req: Request, res: Response) => {
 
 export const getWorkSchedules = async (req: Request, res: Response) => {
   try {
-    const { month, year } = req.query;
+    const { month, year, startDate: reqStart, endDate: reqEnd } = req.query;
     let startDate: Date;
     let endDate: Date;
 
-    if (month && typeof month === 'string' && month.includes('-')) {
+    if (reqStart && reqEnd && typeof reqStart === 'string' && typeof reqEnd === 'string') {
+      startDate = new Date(reqStart);
+      startDate.setHours(0, 0, 0, 0);
+      endDate = new Date(reqEnd);
+      endDate.setHours(23, 59, 59, 999);
+    } else if (month && typeof month === 'string' && month.includes('-')) {
       const [y, m] = month.split('-').map(Number);
       startDate = new Date(y, m - 1, 1, 0, 0, 0);
       endDate = new Date(y, m, 0, 23, 59, 59);
@@ -220,7 +225,7 @@ export const bulkSaveWorkSchedules = async (req: Request, res: Response) => {
 
       for (const item of schedules) {
         if (!item.employeeId || !item.date) continue;
-        
+
         const dateObj = new Date(item.date);
         dateObj.setHours(0, 0, 0, 0);
         const dayStart = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate(), 0, 0, 0);
