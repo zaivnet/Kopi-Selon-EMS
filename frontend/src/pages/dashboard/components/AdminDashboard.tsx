@@ -459,7 +459,7 @@ export default function AdminDashboard() {
                     {req.employee?.firstName} {req.employee?.lastName || ''}
                   </p>
                   <p className="mt-1 text-xs text-amber-700 dark:text-amber-300/70">
-                    {req.type === 'LEAVE' ? 'Cuti' : req.type === 'SICK_LEAVE' ? 'Sakit' : req.type === 'SWAP_SHIFT' ? 'Tukar Shift' : 'Izin'} · {dayjs(req.startDate).format('D MMM YYYY')}
+                    {req.type === 'LEAVE' ? 'Cuti' : req.type === 'SICK_LEAVE' ? 'Sakit' : req.type === 'SWAP_SHIFT' ? 'Tukar Shift' : req.type === 'OVERTIME' ? 'Lembur' : 'Izin'} · {dayjs(req.startDate).format('D MMM YYYY')}
                   </p>
                 </div>
               ))

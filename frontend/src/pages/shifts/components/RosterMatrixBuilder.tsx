@@ -51,6 +51,7 @@ export default function RosterMatrixBuilder({
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [selectedWeek, setSelectedWeek] = useState<number>(0);
 
   // Pattern tool state
   const [selectedEmpForPattern, setSelectedEmpForPattern] = useState<string>('');
@@ -80,6 +81,14 @@ export default function RosterMatrixBuilder({
     }
     return days;
   }, [currentMonth]);
+
+  // Compute displayed days based on week filter
+  const displayedDays = useMemo(() => {
+    if (selectedWeek === 0) return monthDays;
+    const startIdx = (selectedWeek - 1) * 7;
+    const endIdx = selectedWeek * 7;
+    return monthDays.slice(startIdx, endIdx);
+  }, [monthDays, selectedWeek]);
 
   // Fetch schedules for current month
   const fetchMonthSchedules = async () => {
@@ -345,6 +354,31 @@ export default function RosterMatrixBuilder({
         </div>
       </div>
 
+      {/* WEEK SELECTION TABS */}
+      <div className="flex flex-wrap items-center gap-1.5 p-1 rounded-2xl bg-slate-100 dark:bg-slate-950 w-fit">
+        {[
+          { label: 'Semua (1 Bulan)', value: 0 },
+          { label: 'Minggu 1 (Tgl 1-7)', value: 1 },
+          { label: 'Minggu 2 (Tgl 8-14)', value: 2 },
+          { label: 'Minggu 3 (Tgl 15-21)', value: 3 },
+          { label: 'Minggu 4 (Tgl 22-28)', value: 4 },
+          { label: 'Minggu 5 (Tgl 29+)', value: 5 }
+        ].map((wk) => (
+          <button
+            key={wk.value}
+            type="button"
+            onClick={() => setSelectedWeek(wk.value)}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              selectedWeek === wk.value
+                ? 'bg-[#6F4E37] text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+            }`}
+          >
+            {wk.label}
+          </button>
+        ))}
+      </div>
+
       {/* MATRIX SPREADSHEET GRID */}
       <div className="relative overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-md dark:border-slate-800 dark:bg-slate-900">
         <div className="overflow-x-auto overflow-y-auto max-h-[600px] scrollbar-thin">
@@ -357,7 +391,7 @@ export default function RosterMatrixBuilder({
                 <th className="p-3.5 font-bold text-slate-600 dark:text-slate-400 min-w-[120px] text-center border-r border-slate-200 dark:border-slate-800">
                   Master Shift
                 </th>
-                {monthDays.map((day) => (
+                {displayedDays.map((day) => (
                   <th
                     key={day.dateStr}
                     className={`p-2.5 text-center min-w-[90px] border-r border-slate-200/70 dark:border-slate-800 ${
@@ -375,7 +409,7 @@ export default function RosterMatrixBuilder({
             <tbody className="divide-y divide-slate-200/70 dark:divide-slate-800">
               {workerEmployees.length === 0 ? (
                 <tr>
-                  <td colSpan={monthDays.length + 2} className="p-8 text-center text-slate-400 italic">
+                  <td colSpan={displayedDays.length + 2} className="p-8 text-center text-slate-400 italic">
                     Tidak ada Karyawan atau Staff aktif ditemukan.
                   </td>
                 </tr>
@@ -398,7 +432,7 @@ export default function RosterMatrixBuilder({
                       </td>
 
                       {/* DAILY SHIFT CELLS */}
-                      {monthDays.map((day) => {
+                      {displayedDays.map((day) => {
                         const currentVal = gridData[emp.id]?.[day.dateStr] || '';
                         const badgeStyle = getShiftBadgeStyle(currentVal, emp.shiftId);
 

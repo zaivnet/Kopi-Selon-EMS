@@ -143,6 +143,7 @@ model SalaryRule {
   absentDeduction           Float     @default(0) // Tidak Masuk
   lateDeductionPerMinute    Float     @default(0) // Terlambat
   underworkDeductionPerHour Float     @default(0) // Kurang jam
+  overtimeBonusPerHour      Float     @default(0) // Bonus lembur per jam
   isActive                  Boolean   @default(true)
   createdAt                 DateTime  @default(now())
   updatedAt                 DateTime  @updatedAt

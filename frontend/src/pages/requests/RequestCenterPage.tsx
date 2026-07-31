@@ -50,7 +50,7 @@ interface RequestItem {
   requestNumber: string;
   employeeId: string;
   employee: Employee;
-  type: 'SWAP_SHIFT' | 'CHANGE_SHIFT' | 'LEAVE' | 'SICK_LEAVE' | 'PERMISSION';
+  type: 'SWAP_SHIFT' | 'CHANGE_SHIFT' | 'LEAVE' | 'SICK_LEAVE' | 'PERMISSION' | 'OVERTIME';
   permissionType?: 'LATE_ARRIVAL' | 'EARLY_LEAVE' | 'ABSENT';
   startDate: string;
   endDate?: string;
@@ -97,10 +97,12 @@ export default function RequestCenterPage() {
   const [submittingAction, setSubmittingAction] = useState(false);
 
   // New Request Form State
-  const [formType, setFormType] = useState<'SWAP_SHIFT' | 'CHANGE_SHIFT' | 'LEAVE' | 'SICK_LEAVE' | 'PERMISSION'>('SWAP_SHIFT');
+  const [formType, setFormType] = useState<'SWAP_SHIFT' | 'CHANGE_SHIFT' | 'LEAVE' | 'SICK_LEAVE' | 'PERMISSION' | 'OVERTIME'>('SWAP_SHIFT');
   const [formPermissionType, setFormPermissionType] = useState<'LATE_ARRIVAL' | 'EARLY_LEAVE' | 'ABSENT'>('LATE_ARRIVAL');
   const [formStartDate, setFormStartDate] = useState('');
   const [formEndDate, setFormEndDate] = useState('');
+  const [formStartTime, setFormStartTime] = useState('17:00');
+  const [formEndTime, setFormEndTime] = useState('20:00');
   const [formTargetShiftId, setFormTargetShiftId] = useState('');
   const [formTargetEmployeeId, setFormTargetEmployeeId] = useState('');
   const [formReason, setFormReason] = useState('');
@@ -197,13 +199,30 @@ export default function RequestCenterPage() {
 
     try {
       setSubmittingForm(true);
+
+      let startPayload = formStartDate;
+      let endPayload = formEndDate || formStartDate;
+
+      if (formType === 'OVERTIME') {
+        startPayload = `${formStartDate}T${formStartTime}:00`;
+        const endTemp = `${formStartDate}T${formEndTime}:00`;
+        if (formEndTime < formStartTime) {
+          const endObj = new Date(endTemp);
+          endObj.setDate(endObj.getDate() + 1);
+          const pad = (n: number) => String(n).padStart(2, '0');
+          endPayload = `${endObj.getFullYear()}-${pad(endObj.getMonth() + 1)}-${pad(endObj.getDate())}T${formEndTime}:00`;
+        } else {
+          endPayload = endTemp;
+        }
+      }
+
       await axios.post(
         '/api/requests',
         {
           type: formType,
           permissionType: formType === 'PERMISSION' ? formPermissionType : null,
-          startDate: formStartDate,
-          endDate: formEndDate || formStartDate,
+          startDate: startPayload,
+          endDate: endPayload,
           targetShiftId: formTargetShiftId || null,
           targetEmployeeId: formTargetEmployeeId || null,
           reason: formReason,
@@ -228,6 +247,8 @@ export default function RequestCenterPage() {
     setFormPermissionType('LATE_ARRIVAL');
     setFormStartDate('');
     setFormEndDate('');
+    setFormStartTime('17:00');
+    setFormEndTime('20:00');
     setFormTargetShiftId('');
     setFormTargetEmployeeId('');
     setFormReason('');
@@ -343,6 +364,12 @@ export default function RequestCenterPage() {
               : permType === 'EARLY_LEAVE'
               ? 'Pulang Awal'
               : 'Izin Tidak Masuk'}
+          </span>
+        );
+      case 'OVERTIME':
+        return (
+          <span className="inline-flex items-center gap-1 rounded-xl bg-orange-100 px-2.5 py-1 text-xs font-semibold text-orange-800 dark:bg-orange-950/60 dark:text-orange-300">
+            <Clock className="h-3.5 w-3.5" /> Lembur
           </span>
         );
       default:
@@ -488,6 +515,7 @@ export default function RequestCenterPage() {
               <option value="LEAVE">Cuti</option>
               <option value="SICK_LEAVE">Izin Sakit</option>
               <option value="PERMISSION">Izin Absen/Terlambat</option>
+              <option value="OVERTIME">Lembur</option>
             </select>
           </div>
 
@@ -632,6 +660,20 @@ export default function RequestCenterPage() {
                             "{item.reason}"
                           </div>
                         )}
+
+                        {item.type === 'OVERTIME' && (
+                          <div>
+                            <span className="text-slate-500">Durasi: </span>
+                            <span className="font-semibold text-slate-700 dark:text-slate-200">
+                              {item.endDate
+                                ? `${((new Date(item.endDate).getTime() - new Date(item.startDate).getTime()) / 3600000).toFixed(1)} Jam`
+                                : '-'}
+                            </span>
+                            <div className="text-[10px] text-slate-400 font-mono">
+                              ({new Date(item.startDate).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false })} - {item.endDate ? new Date(item.endDate).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false }) : ''} WIB)
+                            </div>
+                          </div>
+                        )}
                       </td>
 
                       <td className="px-6 py-4">{getStatusBadge(item.status)}</td>
@@ -738,6 +780,19 @@ export default function RequestCenterPage() {
               >
                 <FileText className="h-3.5 w-3.5" /> Izin
               </button>
+
+              <button
+                type="button"
+                onClick={() => setFormType('OVERTIME')}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition',
+                  formType === 'OVERTIME'
+                    ? 'bg-[#6F4E37] text-white shadow-md'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'
+                )}
+              >
+                <Clock className="h-3.5 w-3.5" /> Lembur
+              </button>
             </div>
 
             {/* Form Fields */}
@@ -764,7 +819,7 @@ export default function RequestCenterPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    {formType === 'LEAVE' || formType === 'SICK_LEAVE' ? 'Tanggal Mulai' : 'Tanggal Shift / Izin'}
+                    {formType === 'LEAVE' || formType === 'SICK_LEAVE' ? 'Tanggal Mulai' : formType === 'OVERTIME' ? 'Tanggal Lembur' : 'Tanggal Shift / Izin'}
                   </label>
                   <input
                     type="date"
@@ -788,6 +843,33 @@ export default function RequestCenterPage() {
                   </div>
                 )}
               </div>
+
+              {formType === 'OVERTIME' && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Jam Mulai Lembur
+                    </label>
+                    <input
+                      type="time"
+                      value={formStartTime}
+                      onChange={(e) => setFormStartTime(e.target.value)}
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-2.5 text-sm outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Jam Selesai Lembur
+                    </label>
+                    <input
+                      type="time"
+                      value={formEndTime}
+                      onChange={(e) => setFormEndTime(e.target.value)}
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-2.5 text-sm outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* Swap Peer Selection */}
               {formType === 'SWAP_SHIFT' && (
@@ -959,6 +1041,18 @@ export default function RequestCenterPage() {
                   <span className="text-slate-500">Shift Baru Yang Diminta:</span>
                   <span className="font-semibold text-slate-700 dark:text-slate-200">
                     {selectedRequest.targetShift.name} ({selectedRequest.targetShift.startTime} - {selectedRequest.targetShift.endTime})
+                  </span>
+                </div>
+              )}
+
+              {selectedRequest.type === 'OVERTIME' && (
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Jam Lembur:</span>
+                  <span className="font-semibold text-slate-700 dark:text-slate-200">
+                    {new Date(selectedRequest.startDate).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false })} - {selectedRequest.endDate ? new Date(selectedRequest.endDate).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false }) : ''} WIB 
+                    {selectedRequest.endDate && (
+                      ` (${((new Date(selectedRequest.endDate).getTime() - new Date(selectedRequest.startDate).getTime()) / 3600000).toFixed(1)} Jam)`
+                    )}
                   </span>
                 </div>
               )}

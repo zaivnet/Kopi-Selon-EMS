@@ -59,6 +59,33 @@ function gpsErrorMessage(error: GeolocationPositionError) {
   return 'Lokasi gagal ditemukan. Periksa GPS dan izin lokasi perangkat.';
 }
 
+const loadScript = (src: string): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[src="${src}"]`);
+    if (existing) {
+      if (existing.getAttribute('data-loaded') === 'true') {
+        resolve();
+        return;
+      }
+      const oldOnload = (existing as any).onload;
+      (existing as any).onload = (e: any) => {
+        if (oldOnload) oldOnload(e);
+        resolve();
+      };
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = false;
+    script.onload = () => {
+      script.setAttribute('data-loaded', 'true');
+      resolve();
+    };
+    script.onerror = () => reject(new Error(`Failed to load script ${src}`));
+    document.head.appendChild(script);
+  });
+};
+
 export default function EmployeeAttendancePage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -77,6 +104,7 @@ export default function EmployeeAttendancePage() {
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState<'status' | 'camera'>('status');
+  const [trackingLoaded, setTrackingLoaded] = useState(false);
 
   const { data: status, error: statusError, refetch } = useQuery({
     queryKey: ['attendanceStatus'],
@@ -135,6 +163,25 @@ export default function EmployeeAttendancePage() {
       setCameraError(cameraErrorMessage(error));
     }
   }, [stopCamera]);
+
+  useEffect(() => {
+    if (activeTab === 'camera') {
+      const initTracking = async () => {
+        try {
+          if ((window as any).tracking) {
+            setTrackingLoaded(true);
+            return;
+          }
+          await loadScript('https://cdnjs.cloudflare.com/ajax/libs/tracking.js/1.1.3/tracking-min.js');
+          await loadScript('https://cdnjs.cloudflare.com/ajax/libs/tracking.js/1.1.3/data/face-min.js');
+          setTrackingLoaded(true);
+        } catch (err) {
+          console.error('Gagal memuat script deteksi wajah:', err);
+        }
+      };
+      void initTracking();
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     if (activeTab !== 'camera') {
@@ -286,20 +333,22 @@ export default function EmployeeAttendancePage() {
     videoRef.current.videoWidth > 0 &&
     videoRef.current.videoHeight > 0;
   const locationReady = locationState === 'ready' && !!location && radius?.inRadius === true;
-  const canSubmit = cameraReady && locationReady && !isSubmitting && !!status;
+  const canSubmit = cameraReady && locationReady && !isSubmitting && !!status && trackingLoaded;
   const configuredRadius = radius?.radiusMeters ?? status?.location?.radiusMeters ?? null;
 
   const disabledReason = !status
     ? 'Memuat status absensi...'
     : cameraState !== 'ready'
       ? 'Tunggu hingga kamera siap.'
-      : locationState === 'acquiring'
-        ? 'Tunggu hingga akurasi GPS terbaik ditemukan.'
-        : locationState === 'checking'
-          ? 'Tunggu pemeriksaan radius selesai.'
-        : !radius?.inRadius
-          ? radius?.message || locationError || 'Anda harus berada di dalam radius absensi.'
-          : null;
+      : activeTab === 'camera' && !trackingLoaded
+        ? 'Tunggu, memuat modul deteksi wajah...'
+        : locationState === 'acquiring'
+          ? 'Tunggu hingga akurasi GPS terbaik ditemukan.'
+          : locationState === 'checking'
+            ? 'Tunggu pemeriksaan radius selesai.'
+            : !radius?.inRadius
+              ? radius?.message || locationError || 'Anda harus berada di dalam radius absensi.'
+              : null;
 
   const handleAttendance = async () => {
     if (!canSubmit || !location || !videoRef.current || !canvasRef.current) {
@@ -315,12 +364,81 @@ export default function EmployeeAttendancePage() {
         throw new Error('Kamera belum menghasilkan gambar. Tunggu sebentar lalu coba lagi.');
       }
       const canvas = canvasRef.current;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      const maxDim = 640;
+      let targetWidth = video.videoWidth;
+      let targetHeight = video.videoHeight;
+      if (targetWidth > maxDim || targetHeight > maxDim) {
+        if (targetWidth > targetHeight) {
+          targetHeight = Math.round((targetHeight * maxDim) / targetWidth);
+          targetWidth = maxDim;
+        } else {
+          targetWidth = Math.round((targetWidth * maxDim) / targetHeight);
+          targetHeight = maxDim;
+        }
+      }
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
       const context = canvas.getContext('2d');
       if (!context) throw new Error('Foto tidak dapat diproses oleh browser.');
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const photo = canvas.toDataURL('image/jpeg', 0.78);
+
+      // Verifikasi deteksi wajah
+      let faceDetected = false;
+      console.log('Starting face detection on captured canvas...');
+
+      // 1. Coba Native Shape Detection API (jika didukung browser, sangat cepat)
+      if ((window as any).FaceDetector) {
+        try {
+          // @ts-ignore
+          const faceDetector = new window.FaceDetector({ fastMode: true });
+          const faces = await faceDetector.detect(canvas);
+          console.log('Native FaceDetector results:', faces);
+          const validFaces = faces.filter((f: any) => f.boundingBox && f.boundingBox.width >= 100);
+          if (validFaces.length > 0) {
+            faceDetected = true;
+            console.log('Valid face detected natively!');
+          }
+        } catch (e) {
+          console.warn('Native FaceDetector gagal:', e);
+        }
+      }
+
+      // 2. Fallback ke tracking.js
+      if (!faceDetected && (window as any).tracking) {
+        try {
+          const tracker = new (window as any).tracking.ObjectTracker('face');
+          tracker.setInitialScale(4);
+          tracker.setStepSize(2);
+          tracker.setEdgesDensity(0.1);
+
+          // Jalankan pelacakan secara sinkron pada canvas
+          const rects = await new Promise<any[]>((resolve) => {
+            tracker.once('track', (event: any) => {
+              resolve(event.data || []);
+            });
+            (window as any).tracking.track(canvas, tracker);
+          });
+
+          console.log('tracking.js face detection raw rectangles:', rects);
+          // Enforce minimum face size of 100px to filter out background ceiling patterns or grids
+          const validFaces = rects.filter((r: any) => r.width >= 100 && r.height >= 100);
+          console.log('tracking.js valid faces (size >= 100px):', validFaces);
+
+          if (validFaces.length > 0) {
+            faceDetected = true;
+            console.log('Valid face detected via tracking.js!');
+          }
+        } catch (e) {
+          console.error('tracking.js face detection error:', e);
+        }
+      }
+
+      if (!faceDetected) {
+        console.error('Face detection failed: No valid face found in the image.');
+        throw new Error('Wajah tidak terdeteksi. Silakan posisikan wajah Anda tepat di depan kamera dan pastikan pencahayaan cukup.');
+      }
+
+      const photo = canvas.toDataURL('image/jpeg', 0.75);
       if (!photo || photo === 'data:,') throw new Error('Foto selfie kosong. Coba ambil ulang.');
 
       const type = status.isCheckedIn ? 'CHECK_OUT' : 'CHECK_IN';

@@ -62,6 +62,7 @@ export default function ReportPage() {
       'Tidak Hadir (Hari)': r.absentDays,
       'Keterlambatan (Menit)': r.lateMins,
       'Kurang Jam (Jam)': r.underworkHours,
+      'Jam Lembur (Jam)': r.overtimeHours,
       'Gaji Pokok': r.baseSalary,
       'Total Potongan': r.totalDeduction,
       'Total Gaji (Net)': r.totalSalary
@@ -83,7 +84,7 @@ export default function ReportPage() {
     const periodText = filterType === 'month' ? `Periode: Bulan ${month} Tahun ${year}` : `Periode: ${startDate || '-'} s/d ${endDate || '-'}`;
     doc.text(periodText, 14, 30);
     
-    const tableColumn = ["Karyawan", "Shift", "Kehadiran", "Tidak Hadir", "Terlambat", "Kurang Jam", "Potongan", "Total Gaji"];
+    const tableColumn = ["Karyawan", "Shift", "Kehadiran", "Tidak Hadir", "Terlambat", "Kurang Jam", "Jam Lembur", "Potongan", "Total Gaji"];
     const tableRows = reportData.map((row: any) => [
       row.name,
       row.shift,
@@ -91,6 +92,7 @@ export default function ReportPage() {
       row.absentDays + " Hari",
       row.lateMins + " Menit",
       row.underworkHours + " Jam",
+      (row.overtimeHours || "0") + " Jam",
       formatCurrency(row.totalDeduction),
       formatCurrency(row.totalSalary)
     ]);
@@ -224,6 +226,7 @@ export default function ReportPage() {
                     <th className="px-4 py-3 font-semibold">Absensi</th>
                     <th className="px-4 py-3 font-semibold text-center">Keterlambatan</th>
                     <th className="px-4 py-3 font-semibold text-center">Kurang Jam</th>
+                    <th className="px-4 py-3 font-semibold text-center">Jam Lembur</th>
                     <th className="px-4 py-3 font-semibold text-center">Tidak Hadir</th>
                     <th className="px-4 py-3 font-semibold text-right">Potongan</th>
                     <th className="px-4 py-3 font-semibold text-right">Total Gaji</th>
@@ -232,7 +235,7 @@ export default function ReportPage() {
                 <tbody className="divide-y">
                   {reportData?.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground border-b">Data tidak ditemukan.</td>
+                      <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground border-b">Data tidak ditemukan.</td>
                     </tr>
                   ) : (
                     reportData?.map((row: any) => (
@@ -256,6 +259,13 @@ export default function ReportPage() {
                         <td className="px-4 py-3 text-center">
                           {Number(row.underworkHours) > 0 ? (
                             <span className="text-amber-600 font-medium">{row.underworkHours} Jam</span>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {Number(row.overtimeHours) > 0 ? (
+                            <span className="text-emerald-600 font-semibold">{row.overtimeHours} Jam</span>
                           ) : (
                             <span className="text-muted-foreground">-</span>
                           )}

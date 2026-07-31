@@ -41,12 +41,16 @@ Sistem EMS Kopi Selon menggunakan model **Role-Based Access Control (RBAC)** den
 
 ## ⚙️ Fitur & Persyaratan Sistem
 
-### 🌟 Fitur Utama
+### 🌟 Fitur Utama & Update Terbaru (Agustus 2026)
 - 📍 **Absensi GPS & Geofencing Selfie**: Validasi jarak radius titik lokasi warkop & foto selfie real-time.
+- 👤 **Verifikasi Deteksi Wajah Pintar (Anti-False-Positive)**: Absensi mewajibkan pendeteksian wajah asli di kamera depan (menggunakan Web Shape Detection API / fallback `tracking.js`). Dilengkapi dengan batasan ukuran minimum wajah 100px untuk mencegah deteksi palsu dari objek latar belakang (seperti motif langit-langit/plafon).
+- 🖼️ **Kompresi Gambar Otomatis**: Foto selfie presensi otomatis dikompresi di sisi client (maks 640px, JPEG kualitas 75%) sebelum diunggah untuk menghemat penyimpanan server hingga 90%+.
 - 📅 **Matriks Shift & Tukar Shift**: Manajemen jadwal kerja fleksibel, kalender matriks karyawan, dan approval tukar shift.
-- 💵 **Payroll & Rules Potongan**: Perhitungan slip gaji otomatis berdasarkan denda keterlambatan/absen tanpa izin.
-- 📊 **Executive & Staff Dashboard**: Widget visual performa outlet, statistik presensi, dan ringkasan pengajuan.
-- 🔐 **Struktur RBAC Kustom**: Pengaturan permission per role yang fleksibel dan berlaku real-time.
+- 🗓️ **Penyaringan Roster Mingguan**: Builder matriks jadwal kini mendukung penyaringan per minggu (Minggu 1 s/d 5) di samping tampilan bulanan untuk memudahkan penataan shift tanpa perlu scroll horizontal berlebih.
+- 💵 **Payroll, Bonus Lembur & Denda**: 
+  - Perhitungan slip gaji otomatis berdasarkan denda keterlambatan/absen tanpa izin.
+  - Fitur **Pengajuan Lembur (Overtime Request)** terintegrasi dari portal karyawan. Lembur yang disetujui mengurangi denda kurang jam kerja, sekaligus menambahkan **Bonus Lembur per Jam** yang bisa diatur pada aturan gaji (Salary Rules) serta disimulasikan secara real-time.
+- ✏️ **Edit Profil Mandiri Karyawan**: Semua peran (Owner, Staff, Karyawan) dapat memperbarui nama lengkap dan nomor telepon mereka sendiri secara mandiri melalui pop-up Profil Saya di sistem.
 
 ### 🖥️ Persyaratan Minimal Server / Proxmox CT:
 - **CPU**: 1 vCPU

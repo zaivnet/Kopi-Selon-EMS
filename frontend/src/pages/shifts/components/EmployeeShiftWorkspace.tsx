@@ -495,7 +495,7 @@ export default function EmployeeShiftWorkspace({ user }: EmployeeShiftWorkspaceP
         <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">
           Aksi Cepat Pengajuan
         </h3>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           <button
             type="button"
             onClick={() => openDrawer('SWAP_SHIFT')}
@@ -549,6 +549,20 @@ export default function EmployeeShiftWorkspace({ user }: EmployeeShiftWorkspaceP
             <div>
               <p className="text-xs font-bold text-slate-800 dark:text-slate-100">Ajukan Izin</p>
               <p className="text-[11px] text-slate-500">Sakit / Terlambat</p>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => openDrawer('OVERTIME')}
+            className="flex items-center gap-3 rounded-2xl border border-orange-200/80 bg-orange-50/50 p-3.5 text-left transition hover:-translate-y-0.5 hover:bg-orange-100/60 dark:border-orange-900/40 dark:bg-orange-950/20 dark:hover:bg-orange-900/30"
+          >
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-600 text-white shadow-md">
+              <Clock className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-slate-800 dark:text-slate-100">Ajukan Lembur</p>
+              <p className="text-[11px] text-slate-500">Minta jam lembur</p>
             </div>
           </button>
         </div>

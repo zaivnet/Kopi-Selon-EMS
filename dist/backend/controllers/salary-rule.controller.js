@@ -12,6 +12,7 @@ export const getActiveRule = async (req, res) => {
                     absentDeduction: 0,
                     lateDeductionPerMinute: 0,
                     underworkDeductionPerHour: 0,
+                    overtimeBonusPerHour: 0,
                     isActive: true
                 }
             });
@@ -38,7 +39,7 @@ export const getHistory = async (req, res) => {
 };
 export const updateRule = async (req, res) => {
     try {
-        const { absentDeduction, lateDeductionPerMinute, underworkDeductionPerHour } = req.body;
+        const { absentDeduction, lateDeductionPerMinute, underworkDeductionPerHour, overtimeBonusPerHour } = req.body;
         // Deactivate current active rules
         await prisma.salaryRule.updateMany({
             where: { isActive: true },
@@ -50,6 +51,7 @@ export const updateRule = async (req, res) => {
                 absentDeduction: Number(absentDeduction),
                 lateDeductionPerMinute: Number(lateDeductionPerMinute),
                 underworkDeductionPerHour: Number(underworkDeductionPerHour),
+                overtimeBonusPerHour: Number(overtimeBonusPerHour || 0),
                 isActive: true
             }
         });

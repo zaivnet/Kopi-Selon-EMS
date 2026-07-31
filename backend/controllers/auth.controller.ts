@@ -96,34 +96,80 @@ export const profile = async (req: AuthRequest, res: Response) => {
 
 export const updateProfile = async (req: AuthRequest, res: Response) => {
   try {
-    const isAdmin = req.user?.role?.name === 'Administrator';
-    const canEditUser = isAdmin || (Array.isArray(req.user?.permissions) && req.user.permissions.includes('user_management.edit_user'));
+    const currentUser = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { username: true }
+    });
 
-    if (!canEditUser) {
-      return res.status(403).json({ message: 'Username hanya dapat diubah oleh pengguna dengan izin user_management.edit_user.' });
+    if (!currentUser) {
+      return res.status(404).json({ message: 'Akun tidak ditemukan.' });
     }
 
     const username = typeof req.body?.username === 'string' ? req.body.username.trim() : '';
+    const userUpdateData: any = {};
 
-    if (!username) return res.status(400).json({ message: 'Username wajib diisi.' });
+    if (username && username !== currentUser.username) {
+      const isAdmin = req.user?.role?.name === 'Administrator';
+      const canEditUser = isAdmin || (Array.isArray(req.user?.permissions) && req.user.permissions.includes('user_management.edit_user'));
 
-    const duplicate = await prisma.user.findFirst({
-      where: {
-        id: { not: req.user.id },
-        username,
-      },
-      select: { username: true },
-    });
-    if (duplicate) {
-      return res.status(409).json({ message: 'Username sudah digunakan oleh akun lain.' });
+      if (!canEditUser) {
+        return res.status(403).json({ message: 'Username hanya dapat diubah oleh pengguna dengan izin user_management.edit_user.' });
+      }
+
+      const duplicate = await prisma.user.findFirst({
+        where: {
+          id: { not: req.user.id },
+          username,
+        },
+        select: { username: true },
+      });
+      if (duplicate) {
+        return res.status(409).json({ message: 'Username sudah digunakan oleh akun lain.' });
+      }
+      userUpdateData.username = username;
     }
 
-    const user = await prisma.user.update({
+    const employeeUpdate: any = {};
+    if (typeof req.body.name === 'string') {
+      const nameInput = req.body.name.trim();
+      if (!nameInput) {
+        return res.status(400).json({ message: 'Nama wajib diisi.' });
+      }
+      const parts = nameInput.split(/\s+/);
+      const firstName = parts[0];
+      const lastName = parts.slice(1).join(' ');
+      employeeUpdate.firstName = firstName;
+      employeeUpdate.lastName = lastName || null;
+    }
+
+    if (typeof req.body.phone === 'string') {
+      employeeUpdate.phone = req.body.phone.trim() || null;
+    }
+
+    if (Object.keys(employeeUpdate).length > 0) {
+      const existingEmployee = await prisma.employee.findUnique({
+        where: { userId: req.user.id }
+      });
+      if (existingEmployee) {
+        userUpdateData.employee = {
+          update: employeeUpdate
+        };
+      } else {
+        userUpdateData.employee = {
+          create: {
+            ...employeeUpdate,
+            status: 'ACTIVE'
+          }
+        };
+      }
+    }
+
+    const updatedUser = await prisma.user.update({
       where: { id: req.user.id },
-      data: { username },
+      data: userUpdateData,
       select: publicProfileSelect,
     });
-    return res.json(user);
+    return res.json(updatedUser);
   } catch (error: any) {
     if (error?.code === 'P2002') {
       return res.status(409).json({ message: 'Username sudah digunakan oleh akun lain.' });

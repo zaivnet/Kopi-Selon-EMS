@@ -70,6 +70,17 @@ export const generatePayroll = async (req, res) => {
                             lt: periodEnd
                         }
                     }
+                },
+                submittedRequests: {
+                    where: {
+                        type: 'OVERTIME',
+                        status: 'Approved',
+                        deletedAt: null,
+                        startDate: {
+                            gte: periodStart,
+                            lt: periodEnd
+                        }
+                    }
                 }
             }
         });
@@ -109,6 +120,20 @@ export const generatePayroll = async (req, res) => {
                     underworkHours += (shortageMins / 60);
                 }
             }
+            // Calculate total approved overtime hours in the period
+            let totalOvertimeHours = 0;
+            if (Array.isArray(emp.submittedRequests)) {
+                for (const req of emp.submittedRequests) {
+                    if (req.endDate) {
+                        const start = new Date(req.startDate);
+                        const end = new Date(req.endDate);
+                        const diffMs = end.getTime() - start.getTime();
+                        totalOvertimeHours += diffMs / 3600000;
+                    }
+                }
+            }
+            // Offset underwork hours with overtime hours
+            underworkHours = Math.max(0, underworkHours - totalOvertimeHours);
             const lateDeduction = lateMins * rule.lateDeductionPerMinute;
             const underworkDeduction = underworkHours * rule.underworkDeductionPerHour;
             // Calculate unique attended days
@@ -135,8 +160,9 @@ export const generatePayroll = async (req, res) => {
                 deductions.push({ name: 'Kurang Jam', amount: underworkDeduction });
             if (absentDeduction > 0)
                 deductions.push({ name: 'Tidak Masuk', amount: absentDeduction });
+            const overtimeBonus = totalOvertimeHours * (rule.overtimeBonusPerHour || 0);
             totalDeduction = lateDeduction + underworkDeduction + absentDeduction;
-            const netSalary = emp.baseSalary - totalDeduction;
+            const netSalary = emp.baseSalary + overtimeBonus - totalDeduction;
             // Check if history already exists
             const existing = await prisma.salaryHistory.findFirst({
                 where: { employeeId: emp.id, periodMonth, periodYear, deletedAt: null }
@@ -148,7 +174,7 @@ export const generatePayroll = async (req, res) => {
                         periodMonth,
                         periodYear,
                         baseSalary: emp.baseSalary,
-                        totalAllowance: 0,
+                        totalAllowance: overtimeBonus,
                         totalDeduction,
                         netSalary,
                         status: 'PENDING',

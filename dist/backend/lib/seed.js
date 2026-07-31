@@ -164,6 +164,7 @@ export async function seedDatabase() {
                 absentDeduction: 50000,
                 lateDeductionPerMinute: 1000,
                 underworkDeductionPerHour: 10000,
+                overtimeBonusPerHour: 15000,
                 isActive: true
             }
         });

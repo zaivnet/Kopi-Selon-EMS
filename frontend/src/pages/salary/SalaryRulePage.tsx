@@ -15,6 +15,7 @@ export default function SalaryRulePage() {
   const [absentDeduction, setAbsentDeduction] = useState('');
   const [lateDeductionPerMinute, setLateDeductionPerMinute] = useState('');
   const [underworkDeductionPerHour, setUnderworkDeductionPerHour] = useState('');
+  const [overtimeBonusPerHour, setOvertimeBonusPerHour] = useState('');
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
 
   // Simulation calculator state
@@ -22,6 +23,7 @@ export default function SalaryRulePage() {
   const [simLateMins, setSimLateMins] = useState('20');
   const [simUnderworkHours, setSimUnderworkHours] = useState('2');
   const [simAbsentDays, setSimAbsentDays] = useState('1');
+  const [simOvertimeHours, setSimOvertimeHours] = useState('4');
 
   const { isLoading: isLoadingActive } = useQuery({
     queryKey: ['activeSalaryRule'],
@@ -30,6 +32,7 @@ export default function SalaryRulePage() {
       setAbsentDeduction(res.data.absentDeduction.toString());
       setLateDeductionPerMinute(res.data.lateDeductionPerMinute.toString());
       setUnderworkDeductionPerHour(res.data.underworkDeductionPerHour.toString());
+      setOvertimeBonusPerHour((res.data.overtimeBonusPerHour || 0).toString());
       return res.data;
     }
   });
@@ -50,7 +53,7 @@ export default function SalaryRulePage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['activeSalaryRule'] });
       queryClient.invalidateQueries({ queryKey: ['salaryRuleHistory'] });
-      setSaveNotice('Aturan potongan gaji terbaru berhasil disimpan dan diaktifkan!');
+      setSaveNotice('Aturan gaji terbaru berhasil disimpan dan diaktifkan!');
       setTimeout(() => setSaveNotice(null), 4000);
     },
     onError: (err: any) => {
@@ -60,11 +63,12 @@ export default function SalaryRulePage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (confirm('Anda yakin ingin memperbarui aturan potongan gaji? Perubahan ini berlaku untuk perhitungan payroll berikutnya.')) {
+    if (confirm('Anda yakin ingin memperbarui aturan gaji? Perubahan ini berlaku untuk perhitungan payroll berikutnya.')) {
       mutation.mutate({
         absentDeduction,
         lateDeductionPerMinute,
-        underworkDeductionPerHour
+        underworkDeductionPerHour,
+        overtimeBonusPerHour
       });
     }
   };
@@ -77,13 +81,15 @@ export default function SalaryRulePage() {
   const valAbsent = Number(absentDeduction) || 0;
   const valLate = Number(lateDeductionPerMinute) || 0;
   const valUnderwork = Number(underworkDeductionPerHour) || 0;
+  const valOvertime = Number(overtimeBonusPerHour) || 0;
 
   const simBase = Number(simBaseSalary) || 0;
   const simLate = (Number(simLateMins) || 0) * valLate;
   const simUnder = (Number(simUnderworkHours) || 0) * valUnderwork;
   const simAbsent = (Number(simAbsentDays) || 0) * valAbsent;
+  const simOver = (Number(simOvertimeHours) || 0) * valOvertime;
   const totalSimDeduction = simLate + simUnder + simAbsent;
-  const simNetSalary = Math.max(0, simBase - totalSimDeduction);
+  const simNetSalary = Math.max(0, simBase + simOver - totalSimDeduction);
 
   if (!canManageSalaryRules) {
     return (
@@ -207,6 +213,25 @@ export default function SalaryRulePage() {
                     <p className="text-[11px] text-slate-500 dark:text-amber-300/70">Potongan jika total durasi jam kerja kurang dari target 8 jam per shift.</p>
                   </div>
 
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-amber-200">
+                      4. Tunjangan / Bonus Lembur (Per Jam)
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3.5 top-3 text-xs font-bold text-slate-500 dark:text-amber-400">Rp</span>
+                      <Input
+                        type="number"
+                        min="0"
+                        required
+                        value={overtimeBonusPerHour}
+                        onChange={(e) => setOvertimeBonusPerHour(e.target.value)}
+                        className="pl-10 font-bold text-slate-900 dark:text-amber-100"
+                        placeholder="Contoh: 15000"
+                      />
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-amber-300/70">Tunjangan bonus yang ditambahkan untuk setiap 1 jam kerja lembur yang disetujui.</p>
+                  </div>
+
                   <Button
                     type="submit"
                     disabled={mutation.isPending}
@@ -269,6 +294,15 @@ export default function SalaryRulePage() {
                     className="mt-1 text-xs font-semibold"
                   />
                 </div>
+                <div>
+                  <label className="text-[11px] font-bold uppercase text-slate-600 dark:text-amber-300/80">Jam Lembur (Jam)</label>
+                  <Input
+                    type="number"
+                    value={simOvertimeHours}
+                    onChange={(e) => setSimOvertimeHours(e.target.value)}
+                    className="mt-1 text-xs font-semibold"
+                  />
+                </div>
               </div>
 
               {/* Live Simulation Breakdown */}
@@ -284,6 +318,10 @@ export default function SalaryRulePage() {
                 <div className="flex justify-between text-xs">
                   <span className="text-slate-600 dark:text-amber-300/70">Potongan Tidak Masuk ({simAbsentDays}h):</span>
                   <span className="font-bold text-red-600 dark:text-red-400">-{formatCurrency(simAbsent)}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-600 dark:text-amber-300/70">Bonus Lembur ({simOvertimeHours}j):</span>
+                  <span className="font-bold text-emerald-600 dark:text-emerald-400">+{formatCurrency(simOver)}</span>
                 </div>
                 <div className="border-t border-dashed border-amber-500/20 pt-2 flex justify-between text-xs font-extrabold">
                   <span className="text-slate-800 dark:text-amber-100">Total Potongan Gaji:</span>
@@ -354,9 +392,13 @@ export default function SalaryRulePage() {
                           <span className="text-slate-600 dark:text-amber-300/70">Terlambat (Menit):</span>
                           <span className="font-bold text-red-600 dark:text-red-400">{formatCurrency(rule.lateDeductionPerMinute)}</span>
                         </div>
-                        <div className="flex justify-between pb-0.5">
+                        <div className="flex justify-between border-b border-amber-500/10 pb-1 dark:border-amber-900/20">
                           <span className="text-slate-600 dark:text-amber-300/70">Kurang Jam (Jam):</span>
                           <span className="font-bold text-red-600 dark:text-red-400">{formatCurrency(rule.underworkDeductionPerHour)}</span>
+                        </div>
+                        <div className="flex justify-between pb-0.5">
+                          <span className="text-slate-600 dark:text-amber-300/70">Bonus Lembur (Jam):</span>
+                          <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(rule.overtimeBonusPerHour || 0)}</span>
                         </div>
                       </div>
                     </div>

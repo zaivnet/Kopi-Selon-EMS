@@ -42,7 +42,12 @@ export const getRequests = async (req, res) => {
             whereClause.type = type;
         }
         if (status && typeof status === 'string' && status !== 'ALL') {
-            whereClause.status = status;
+            if (status === 'Pending') {
+                whereClause.status = { in: ['Waiting Staff Approval', 'Waiting Employee Approval'] };
+            }
+            else {
+                whereClause.status = status;
+            }
         }
         if (search && typeof search === 'string' && search.trim()) {
             const query = search.trim();
@@ -168,6 +173,14 @@ export const createRequest = async (req, res) => {
         const requestNumber = await generateRequestNumber();
         const startDateTime = new Date(startDate);
         const endDateTime = endDate ? new Date(endDate) : startDateTime;
+        if (type === 'OVERTIME') {
+            if (!endDate) {
+                return res.status(400).json({ message: 'Tanggal selesai lembur wajib diisi.' });
+            }
+            if (endDateTime <= startDateTime) {
+                return res.status(400).json({ message: 'Waktu selesai lembur harus setelah waktu mulai.' });
+            }
+        }
         if (type === 'SWAP_SHIFT' || type === 'CHANGE_SHIFT') {
             const targetDate = new Date(startDate);
             const dateStart = new Date(targetDate.setHours(0, 0, 0, 0));

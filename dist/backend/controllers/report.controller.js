@@ -44,6 +44,24 @@ export const getReportData = async (req, res) => {
                             periodYear: Number(year)
                         } : {})
                     }
+                },
+                submittedRequests: {
+                    where: {
+                        type: 'OVERTIME',
+                        status: 'Approved',
+                        deletedAt: null,
+                        ...(startDate && endDate ? {
+                            startDate: {
+                                gte: new Date(String(startDate)),
+                                lt: new Date(new Date(String(endDate)).getTime() + 24 * 60 * 60 * 1000)
+                            }
+                        } : month && year ? {
+                            startDate: {
+                                gte: new Date(Number(year), Number(month) - 1, 1),
+                                lt: new Date(Number(year), Number(month), 1)
+                            }
+                        } : {})
+                    }
                 }
             }
         });
@@ -87,6 +105,20 @@ export const getReportData = async (req, res) => {
                     underworkHours += (shortageMins / 60);
                 }
             }
+            // Calculate total approved overtime hours in the period
+            let totalOvertimeHours = 0;
+            if (Array.isArray(emp.submittedRequests)) {
+                for (const req of emp.submittedRequests) {
+                    if (req.endDate) {
+                        const start = new Date(req.startDate);
+                        const end = new Date(req.endDate);
+                        const diffMs = end.getTime() - start.getTime();
+                        totalOvertimeHours += diffMs / 3600000;
+                    }
+                }
+            }
+            // Offset underwork hours with overtime hours
+            underworkHours = Math.max(0, underworkHours - totalOvertimeHours);
             let absentDays = 0;
             if (month && year) {
                 absentDays = Math.max(0, 26 - totalPresent);
@@ -113,8 +145,9 @@ export const getReportData = async (req, res) => {
                 const lateDeduction = lateMins * rule.lateDeductionPerMinute;
                 const underworkDeduction = underworkHours * rule.underworkDeductionPerHour;
                 const absentDeduction = absentDays * rule.absentDeduction;
+                const overtimeBonus = totalOvertimeHours * (rule.overtimeBonusPerHour || 0);
                 totalDeduction = lateDeduction + underworkDeduction + absentDeduction;
-                totalSalary = emp.baseSalary - totalDeduction;
+                totalSalary = emp.baseSalary + overtimeBonus - totalDeduction;
             }
             return {
                 id: emp.id,
@@ -123,6 +156,7 @@ export const getReportData = async (req, res) => {
                 totalPresent,
                 lateMins,
                 underworkHours: underworkHours.toFixed(2),
+                overtimeHours: totalOvertimeHours.toFixed(2),
                 absentDays,
                 totalDeduction,
                 totalSalary,

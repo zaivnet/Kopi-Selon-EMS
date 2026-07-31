@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export type RequestDrawerType = 'SWAP_SHIFT' | 'CHANGE_SHIFT' | 'LEAVE' | 'SICK_LEAVE' | 'PERMISSION';
+export type RequestDrawerType = 'SWAP_SHIFT' | 'CHANGE_SHIFT' | 'LEAVE' | 'SICK_LEAVE' | 'PERMISSION' | 'OVERTIME';
 
 interface Shift {
   id: string;
@@ -59,6 +59,10 @@ export default function EmployeeRequestDrawer({
     new Date().toISOString().slice(0, 10)
   );
 
+  // Overtime times
+  const [overtimeStartTime, setOvertimeStartTime] = useState<string>('17:00');
+  const [overtimeEndTime, setOvertimeEndTime] = useState<string>('20:00');
+
   // Shifts & Peers
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [targetShiftId, setTargetShiftId] = useState<string>('');
@@ -89,6 +93,8 @@ export default function EmployeeRequestDrawer({
       setAttachmentUrl('');
       setSelectedPeer(null);
       setTargetShiftId('');
+      setOvertimeStartTime('17:00');
+      setOvertimeEndTime('20:00');
     }
   }, [isOpen, initialType]);
 
@@ -199,11 +205,30 @@ export default function EmployeeRequestDrawer({
           ? permissionCategory
           : null;
 
+      let startPayload: string = selectedDate;
+      let endPayload: string = selectedDate;
+
+      if (requestType === 'OVERTIME') {
+        startPayload = `${selectedDate}T${overtimeStartTime}:00`;
+        const endTemp = `${selectedDate}T${overtimeEndTime}:00`;
+        if (overtimeEndTime < overtimeStartTime) {
+          const endObj = new Date(endTemp);
+          endObj.setDate(endObj.getDate() + 1);
+          // Format as YYYY-MM-DDTHH:mm:ss because backend will parse it
+          const pad = (n: number) => String(n).padStart(2, '0');
+          endPayload = `${endObj.getFullYear()}-${pad(endObj.getMonth() + 1)}-${pad(endObj.getDate())}T${overtimeEndTime}:00`;
+        } else {
+          endPayload = endTemp;
+        }
+      } else if (requestType === 'LEAVE' || requestType === 'SICK_LEAVE') {
+        endPayload = endDate || selectedDate;
+      }
+
       await api.post('/requests', {
         type: payloadType,
         permissionType: payloadPermissionType,
-        startDate: selectedDate,
-        endDate: requestType === 'LEAVE' || requestType === 'SICK_LEAVE' ? endDate || selectedDate : selectedDate,
+        startDate: startPayload,
+        endDate: endPayload,
         targetShiftId: requestType === 'CHANGE_SHIFT' ? targetShiftId : null,
         targetEmployeeId: requestType === 'SWAP_SHIFT' ? selectedPeer?.id : null,
         reason: fullReason,
@@ -238,6 +263,8 @@ export default function EmployeeRequestDrawer({
       case 'SICK_LEAVE':
       case 'PERMISSION':
         return 'Ajukan Izin / Sakit';
+      case 'OVERTIME':
+        return 'Ajukan Lembur';
       default:
         return 'Buat Permintaan';
     }
@@ -333,6 +360,19 @@ export default function EmployeeRequestDrawer({
                 )}
               >
                 Izin / Sakit
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setRequestType('OVERTIME')}
+                className={cn(
+                  'flex-1 text-center py-1.5 px-2 rounded-xl text-[11px] font-bold transition',
+                  requestType === 'OVERTIME'
+                    ? 'bg-[#6F4E37] text-white shadow-sm'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                )}
+              >
+                Lembur
               </button>
             </div>
 
@@ -543,6 +583,36 @@ export default function EmployeeRequestDrawer({
                         Lihat Berkas
                       </a>
                     )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* OVERTIME FIELDS */}
+            {requestType === 'OVERTIME' && (
+              <div className="mt-4 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Jam Mulai Lembur <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="time"
+                      value={overtimeStartTime}
+                      onChange={(e) => setOvertimeStartTime(e.target.value)}
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-2.5 text-xs font-semibold outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Jam Selesai Lembur <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="time"
+                      value={overtimeEndTime}
+                      onChange={(e) => setOvertimeEndTime(e.target.value)}
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-2.5 text-xs font-semibold outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                    />
                   </div>
                 </div>
               </div>

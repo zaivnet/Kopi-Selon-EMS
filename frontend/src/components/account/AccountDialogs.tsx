@@ -106,7 +106,7 @@ export function AccountDialogs({ active, onClose }: { active: DialogName; onClos
   const { user, updateCurrentUser, hasPermission } = useAuth();
   const canEditUsername = hasPermission('user_management.edit_user');
   const [profile, setProfile] = useState<ProfileData | null>(null);
-  const [profileForm, setProfileForm] = useState({ username: '' });
+  const [profileForm, setProfileForm] = useState({ username: '', name: '', phone: '' });
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmation: '' });
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
@@ -123,7 +123,12 @@ export function AccountDialogs({ active, onClose }: { active: DialogName; onClos
     api.get('/auth/profile')
       .then(({ data }) => {
         setProfile(data);
-        setProfileForm({ username: data.username });
+        const empName = data.employee ? `${data.employee.firstName} ${data.employee.lastName || ''}`.trim() : '';
+        setProfileForm({
+          username: data.username,
+          name: empName,
+          phone: data.employee?.phone || '',
+        });
       })
       .catch((requestError) => {
         setProfile(null);
@@ -156,11 +161,14 @@ export function AccountDialogs({ active, onClose }: { active: DialogName; onClos
 
   const saveProfile = async (event: FormEvent) => {
     event.preventDefault();
-    if (!canEditUsername) return;
     setError('');
     setSuccess('');
     if (!profileForm.username.trim()) {
       setError('Username wajib diisi.');
+      return;
+    }
+    if (profile?.employee && !profileForm.name.trim()) {
+      setError('Nama wajib diisi.');
       return;
     }
     setSaving(true);
@@ -246,10 +254,36 @@ export function AccountDialogs({ active, onClose }: { active: DialogName; onClos
               )}
             </div>
             <label className="block space-y-1.5 text-xs font-semibold text-slate-700 dark:text-amber-100">Role<Input value={roleName} disabled className="cursor-not-allowed opacity-70" /></label>
-            {profile?.employee ? <div className="rounded-2xl border border-amber-200/70 bg-white/60 p-4 text-xs dark:border-[#3e2e24] dark:bg-[#21160f]"><p className="mb-3 font-bold text-[#5b3b27] dark:text-amber-200">Informasi karyawan</p><dl className="grid gap-3 sm:grid-cols-2">{[['Nama', employeeName], ['Telepon', profile.employee.phone || '-']].map(([label, value]) => <div key={label}><dt className="text-slate-400 dark:text-amber-200/45">{label}</dt><dd className="mt-0.5 font-semibold text-slate-700 dark:text-amber-100">{value}</dd></div>)}</dl></div> : null}
+            {profile?.employee ? (
+              <div className="rounded-2xl border border-amber-200/70 bg-white/60 p-4 text-xs dark:border-[#3e2e24] dark:bg-[#21160f] space-y-3.5">
+                <p className="font-bold text-[#5b3b27] dark:text-amber-200">Informasi Karyawan/Staff/Owner</p>
+                <div>
+                  <label className="block space-y-1.5 text-xs font-semibold text-slate-700 dark:text-amber-100">
+                    Nama
+                    <Input
+                      value={profileForm.name}
+                      onChange={(e) => setProfileForm((value) => ({ ...value, name: e.target.value }))}
+                      autoComplete="name"
+                      placeholder="Nama lengkap"
+                    />
+                  </label>
+                </div>
+                <div>
+                  <label className="block space-y-1.5 text-xs font-semibold text-slate-700 dark:text-amber-100">
+                    Telepon
+                    <Input
+                      value={profileForm.phone}
+                      onChange={(e) => setProfileForm((value) => ({ ...value, phone: e.target.value }))}
+                      autoComplete="tel"
+                      placeholder="Nomor HP / Telepon"
+                    />
+                  </label>
+                </div>
+              </div>
+            ) : null}
             <div className="sticky bottom-0 z-[5] -mx-4 flex flex-col-reverse gap-2 border-t border-amber-200/60 bg-[#fffaf3]/95 px-4 pb-0 pt-3 backdrop-blur min-[400px]:flex-row min-[400px]:justify-end sm:-mx-6 sm:px-6 dark:border-[#3e2e24] dark:bg-[#18110d]/95">
               <Button type="button" variant="ghost" className="w-full min-[400px]:w-auto" disabled={saving} onClick={onClose}>Batal</Button>
-              <Button type="submit" className="w-full min-[400px]:w-auto" disabled={saving || !canEditUsername}>
+              <Button type="submit" className="w-full min-[400px]:w-auto" disabled={saving}>
                 {saving && <Loader2 className="h-4 w-4 animate-spin" />} Simpan profil
               </Button>
             </div>
