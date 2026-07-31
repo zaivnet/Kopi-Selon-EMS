@@ -201,6 +201,27 @@ export const createRequest = async (req: AuthRequest, res: Response) => {
     const startDateTime = new Date(startDate);
     const endDateTime = endDate ? new Date(endDate) : startDateTime;
 
+    if (type === 'SWAP_SHIFT' || type === 'CHANGE_SHIFT') {
+      const targetDate = new Date(startDate);
+      const dateStart = new Date(targetDate.setHours(0, 0, 0, 0));
+      const dateEnd = new Date(targetDate.setHours(23, 59, 59, 999));
+
+      const existingAttendance = await prisma.attendance.findFirst({
+        where: {
+          employeeId: requesterEmployee.id,
+          date: { gte: dateStart, lte: dateEnd },
+          clockIn: { not: null },
+          deletedAt: null,
+        },
+      });
+
+      if (existingAttendance) {
+        return res.status(400).json({
+          message: 'Anda tidak dapat mengajukan tukar/ganti shift karena Anda sudah melakukan absensi (clock-in) pada tanggal tersebut.',
+        });
+      }
+    }
+
     let initialStatus = 'Submitted';
     let peerStatus: string | null = null;
 
