@@ -13,7 +13,21 @@ const storage = multer.diskStorage({
         cb(null, 'request-' + uniqueSuffix + path.extname(file.originalname));
     },
 });
-const upload = multer({ storage });
+const upload = multer({
+    storage,
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+        const allowedExts = ['.jpg', '.jpeg', '.png', '.webp', '.pdf'];
+        const allowedMimes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+        const ext = path.extname(file.originalname).toLowerCase();
+        if (allowedExts.includes(ext) && allowedMimes.includes(file.mimetype)) {
+            cb(null, true);
+        }
+        else {
+            cb(new Error('Tipe file tidak diizinkan. Hanya file foto (JPEG/PNG/WEBP) dan PDF yang diperbolehkan.'));
+        }
+    }
+});
 router.use(authenticate);
 router.post('/upload-attachment', upload.single('file'), (req, res) => {
     if (!req.file) {

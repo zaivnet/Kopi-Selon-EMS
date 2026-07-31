@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm as useReactHookForm } from 'react-hook-form';
+import { useAuth } from '@/context/AuthContext';
 import api from '@/lib/api';
+import { sortRolesByHierarchy } from '@/lib/utils';
 
 const schema = z.object({
   name: z.string().min(1, 'Nama Karyawan wajib diisi'),
@@ -23,7 +25,10 @@ export default function EmployeeFormModal({ employee, onClose, onSuccess }: { em
     resolver: zodResolver(schema),
   });
 
+  const { user, hasPermission } = useAuth();
   const [roles, setRoles] = useState<any[]>([]);
+  const STAFF_ASSIGNABLE_ROLES = ['Staff', 'Karyawan'];
+  const isStaffLikeRole = !hasPermission('user_management.edit_user') && (hasPermission('employee.edit') || hasPermission('employee.create'));
 
   useEffect(() => {
     const fetchRoles = async () => {
@@ -36,6 +41,21 @@ export default function EmployeeFormModal({ employee, onClose, onSuccess }: { em
     };
     fetchRoles();
   }, []);
+
+  const filteredRoles = useMemo(() => {
+    let list = roles;
+    if (isStaffLikeRole) {
+      list = roles.filter((role) => {
+        if (STAFF_ASSIGNABLE_ROLES.includes(role.name)) return true;
+        return employee?.user?.roleId === role.id;
+      });
+    }
+    return sortRolesByHierarchy(list);
+  }, [roles, isStaffLikeRole, employee?.user?.roleId]);
+
+  const isRoleSelectDisabled = isStaffLikeRole
+    && employee
+    && !STAFF_ASSIGNABLE_ROLES.includes(employee.user?.role?.name || '');
 
   useEffect(() => {
     if (employee) {
@@ -123,13 +143,20 @@ export default function EmployeeFormModal({ employee, onClose, onSuccess }: { em
 
             <div>
               <label className="text-sm font-medium">Role *</label>
-              <select {...register('roleId')} className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+              <select
+                {...register('roleId')}
+                disabled={isRoleSelectDisabled}
+                className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-70"
+              >
                 <option value="">Pilih Role</option>
-                {roles.map(role => (
+                {filteredRoles.map(role => (
                   <option key={role.id} value={role.id}>{getRoleDisplayName(role.name)}</option>
                 ))}
               </select>
               {errors.roleId && <p className="text-xs text-destructive mt-1">{errors.roleId.message}</p>}
+              {isRoleSelectDisabled && (
+                <p className="text-xs text-slate-500 mt-1">Staff hanya dapat mengubah role Staff/Karyawan, sehingga role ini tidak dapat diubah.</p>
+              )}
             </div>
 
             <div className="col-span-full border-b pb-2 mb-2 mt-4">

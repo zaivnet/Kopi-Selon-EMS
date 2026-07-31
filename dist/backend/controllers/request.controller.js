@@ -16,14 +16,15 @@ async function generateRequestNumber() {
 }
 export const getRequests = async (req, res) => {
     try {
-        const userRole = req.user?.role?.name;
+        const isAdmin = req.user?.role?.name === 'Administrator';
+        const canApproveRequests = isAdmin || (Array.isArray(req.user?.permissions) && req.user.permissions.includes('request_center.approve'));
         const userEmployeeId = req.user?.employee?.id;
         const { type, status, search } = req.query;
         const whereClause = {
             deletedAt: null,
         };
-        // If Karyawan, only see own requests or swap requests targeting them
-        if (userRole === 'Karyawan') {
+        // Non-approvers should only see their own requests or swap requests targeting them.
+        if (!canApproveRequests) {
             if (!userEmployeeId) {
                 return res.json([]);
             }
@@ -356,8 +357,10 @@ export const approveRequest = async (req, res) => {
         const { reviewerNote } = req.body;
         const userId = req.user?.id;
         const userRole = req.user?.role?.name;
-        if (!['Administrator', 'Owner', 'Staff'].includes(userRole)) {
-            return res.status(403).json({ message: 'Hanya Staff atau Administrator yang dapat memberikan persetujuan.' });
+        const isAdmin = req.user?.role?.name === 'Administrator';
+        const canApprove = isAdmin || (Array.isArray(req.user?.permissions) && req.user.permissions.includes('request_center.approve'));
+        if (!canApprove) {
+            return res.status(403).json({ message: 'Hanya pengguna dengan izin persetujuan yang dapat memberikan persetujuan.' });
         }
         const request = await prisma.employeeRequest.findUnique({
             where: { id: id },
@@ -533,8 +536,10 @@ export const rejectRequest = async (req, res) => {
         const { reviewerNote } = req.body;
         const userId = req.user?.id;
         const userRole = req.user?.role?.name;
-        if (!['Administrator', 'Owner', 'Staff'].includes(userRole)) {
-            return res.status(403).json({ message: 'Hanya Staff atau Administrator yang dapat menolak permintaan.' });
+        const isAdmin = req.user?.role?.name === 'Administrator';
+        const canApprove = isAdmin || (Array.isArray(req.user?.permissions) && req.user.permissions.includes('request_center.approve'));
+        if (!canApprove) {
+            return res.status(403).json({ message: 'Hanya pengguna dengan izin persetujuan yang dapat menolak permintaan.' });
         }
         const request = await prisma.employeeRequest.findUnique({
             where: { id: id },
@@ -598,7 +603,9 @@ export const cancelRequest = async (req, res) => {
         if (!request || request.deletedAt) {
             return res.status(404).json({ message: 'Permintaan tidak ditemukan.' });
         }
-        if (request.employeeId !== userEmployeeId && req.user?.role?.name !== 'Administrator') {
+        const isAdmin = req.user?.role?.name === 'Administrator';
+        const canManageAllRequests = isAdmin || (Array.isArray(req.user?.permissions) && req.user.permissions.includes('request_center.approve'));
+        if (request.employeeId !== userEmployeeId && !canManageAllRequests) {
             return res.status(403).json({ message: 'Anda hanya dapat membatalkan permintaan yang Anda buat sendiri.' });
         }
         if (['Approved', 'Rejected', 'Cancelled'].includes(request.status)) {
@@ -642,8 +649,9 @@ export const cancelRequest = async (req, res) => {
 };
 export const getPendingCount = async (req, res) => {
     try {
-        const userRole = req.user?.role?.name;
         const userEmployeeId = req.user?.employee?.id;
+        const isAdmin = req.user?.role?.name === 'Administrator';
+        const canApproveRequests = isAdmin || (Array.isArray(req.user?.permissions) && req.user.permissions.includes('request_center.approve'));
         let peerPendingCount = 0;
         let staffPendingCount = 0;
         if (userEmployeeId) {
@@ -655,7 +663,7 @@ export const getPendingCount = async (req, res) => {
                 },
             });
         }
-        if (['Administrator', 'Owner', 'Staff'].includes(userRole)) {
+        if (canApproveRequests) {
             staffPendingCount = await prisma.employeeRequest.count({
                 where: {
                     status: 'Waiting Staff Approval',

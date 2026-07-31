@@ -60,7 +60,7 @@ export const authorize = (roles: string[]) => {
   };
 };
 
-export const authorizePermission = (permissionKey: string) => {
+export const authorizePermission = (...permissionKeys: string[]) => {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
     if (!req.user) {
       return res.status(401).json({ message: 'Unauthorized' });
@@ -71,12 +71,15 @@ export const authorizePermission = (permissionKey: string) => {
       return next();
     }
 
-    if (Array.isArray(req.user.permissions) && req.user.permissions.includes(permissionKey)) {
-      return next();
+    if (Array.isArray(req.user.permissions)) {
+      const hasPermission = permissionKeys.some(key => req.user.permissions.includes(key));
+      if (hasPermission) {
+        return next();
+      }
     }
 
     return res.status(403).json({ 
-      message: `Forbidden: Anda tidak memiliki hak akses '${permissionKey}'` 
+      message: `Forbidden: Anda tidak memiliki hak akses yang diperlukan` 
     });
   };
 };

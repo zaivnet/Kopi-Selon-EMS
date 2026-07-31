@@ -69,11 +69,11 @@ export default function Sidebar({
   const navItems: NavItem[] = [
     ...(hasPermission('dashboard.view') ? [{ label: 'Dashboard', to: '/dashboard', icon: LayoutDashboard }] : []),
     ...(hasPermission('attendance.create') ? [{ label: 'Absensi Selfie', to: '/dashboard/attendance', icon: Camera }] : []),
-    ...(hasPermission('attendance.view') && user?.role !== 'Karyawan' ? [{ label: 'Monitoring', to: '/dashboard/attendance-monitoring', icon: Activity, badge: 'Live' }] : []),
+    ...(hasPermission('attendance.view') ? [{ label: 'Monitoring', to: '/dashboard/attendance-monitoring', icon: Activity, badge: 'Live' }] : []),
     ...(hasPermission('employee.view') ? [{ label: 'Karyawan', to: '/dashboard/employees', icon: Users }] : []),
     ...(hasPermission('shift.view') ? [{ label: 'Shift Kerja', to: '/dashboard/shifts', icon: CalendarClock }] : []),
-    ...(hasPermission('request_center.view') && user?.role !== 'Karyawan' ? [{ label: 'Request Center', to: '/dashboard/requests', icon: FileText, badge: pendingCount > 0 ? `${pendingCount}` : undefined }] : []),
-    ...(user?.role === 'Administrator' || user?.role === 'Owner' ? [{ label: 'Role & Permissions', to: '/dashboard/roles', icon: ShieldCheck }] : []),
+    ...(hasPermission('request_center.view') ? [{ label: 'Request Center', to: '/dashboard/requests', icon: FileText, badge: pendingCount > 0 ? `${pendingCount}` : undefined }] : []),
+    ...(hasPermission('user_management.create_user') || hasPermission('user_management.edit_user') || hasPermission('user_management.delete_user') || hasPermission('user_management.reset_password') ? [{ label: 'Role & Permissions', to: '/dashboard/roles', icon: ShieldCheck }] : []),
     ...(hasPermission('salary.view') ? [
       { label: 'Aturan Gaji', to: '/dashboard/salary-rules', icon: Receipt },
       { label: 'Penggajian', to: '/dashboard/payroll', icon: Banknote }

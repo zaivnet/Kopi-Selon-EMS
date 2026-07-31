@@ -39,11 +39,11 @@ export default function AppRoutes() {
             <Route path="shifts" element={<ShiftListPage />} />
           </Route>
 
-          <Route element={<ProtectedRoute requiredPermission="request_center.view" allowedRoles={['Administrator', 'Owner', 'Staff']} />}>
+          <Route element={<ProtectedRoute requiredPermission="request_center.view" />}>
             <Route path="requests" element={<RequestCenterPage />} />
           </Route>
 
-          <Route element={<ProtectedRoute allowedRoles={['Administrator', 'Owner']} />}>
+          <Route element={<ProtectedRoute requiredPermission="user_management.edit_user" />}>
             <Route path="roles" element={<RolePermissionsPage />} />
           </Route>
 
@@ -57,8 +57,10 @@ export default function AppRoutes() {
             <Route path="attendance-monitoring" element={<AdminAttendancePage />} />
           </Route>
 
-          <Route element={<ProtectedRoute requiredPermission="salary.view" />}>
+          <Route element={<ProtectedRoute requiredPermission="salary.calculate" />}>
             <Route path="salary-rules" element={<SalaryRulePage />} />
+          </Route>
+          <Route element={<ProtectedRoute requiredPermission="salary.view" />}>
             <Route path="payroll" element={<PayrollPage />} />
           </Route>
 

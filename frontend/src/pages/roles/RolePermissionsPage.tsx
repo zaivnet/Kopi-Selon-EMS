@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import api from '@/lib/api';
@@ -334,16 +334,18 @@ export default function RolePermissionsPage() {
   });
 
   // Sync state from DB fetched roles
-  useMemo(() => {
-    if (Array.isArray(fetchedRoles)) {
-      const nextMap: Record<string, string[]> = { ...rolePermissions };
+  useEffect(() => {
+    if (!Array.isArray(fetchedRoles)) return;
+
+    setRolePermissions((prev) => {
+      const nextMap: Record<string, string[]> = { ...prev };
       fetchedRoles.forEach((roleObj: any) => {
         if (Array.isArray(roleObj.permissions)) {
           nextMap[roleObj.name] = roleObj.permissions;
         }
       });
-      setRolePermissions(nextMap);
-    }
+      return nextMap;
+    });
   }, [fetchedRoles]);
 
   // Drawer state

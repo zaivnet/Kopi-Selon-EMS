@@ -47,7 +47,7 @@ export const authorize = (roles) => {
         next();
     };
 };
-export const authorizePermission = (permissionKey) => {
+export const authorizePermission = (...permissionKeys) => {
     return (req, res, next) => {
         if (!req.user) {
             return res.status(401).json({ message: 'Unauthorized' });
@@ -56,11 +56,14 @@ export const authorizePermission = (permissionKey) => {
         if (req.user.role?.name === 'Administrator') {
             return next();
         }
-        if (Array.isArray(req.user.permissions) && req.user.permissions.includes(permissionKey)) {
-            return next();
+        if (Array.isArray(req.user.permissions)) {
+            const hasPermission = permissionKeys.some(key => req.user.permissions.includes(key));
+            if (hasPermission) {
+                return next();
+            }
         }
         return res.status(403).json({
-            message: `Forbidden: Anda tidak memiliki hak akses '${permissionKey}'`
+            message: `Forbidden: Anda tidak memiliki hak akses yang diperlukan`
         });
     };
 };

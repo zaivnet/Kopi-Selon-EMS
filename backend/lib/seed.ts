@@ -133,6 +133,40 @@ export async function seedDatabase() {
     console.log(`ℹ️ Admin user (${adminUsername}) already exists.`);
   }
 
+  // 2b. Ensure initial Owner user exists
+  const ownerUsername = process.env.INITIAL_OWNER_USERNAME || 'owner';
+  const ownerPassword = process.env.INITIAL_OWNER_PASSWORD || 'owner123';
+
+  let ownerUser = await prisma.user.findUnique({
+    where: { username: ownerUsername },
+    include: { employee: true }
+  });
+
+  if (!ownerUser) {
+    const ownerRole = rolesMap['Owner'] || await prisma.role.findUnique({ where: { name: 'Owner' } });
+    if (ownerRole) {
+      const hashedPassword = await bcrypt.hash(ownerPassword, 10);
+      ownerUser = await prisma.user.create({
+        data: {
+          username: ownerUsername,
+          password: hashedPassword,
+          roleId: ownerRole.id,
+          employee: {
+            create: {
+              firstName: 'Owner',
+              lastName: 'Kopi Selon',
+              status: 'ACTIVE',
+            }
+          }
+        },
+        include: { employee: true }
+      });
+      console.log(`✅ Default Owner user created:`);
+      console.log(`   Username: ${ownerUsername}`);
+      console.log(`   Password: ${ownerPassword}`);
+    }
+  }
+
   // 3. Ensure Default Company Profile exists
   const companyProfileCount = await prisma.companyProfile.count();
   if (companyProfileCount === 0) {

@@ -15,6 +15,7 @@ import {
 import api from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge, Button, EmptyState } from '@/components/ui/design-system';
+import { useAuth } from '@/context/AuthContext';
 
 type DashboardSummary = {
   stats: {
@@ -90,14 +91,14 @@ export default function StaffDashboard() {
 
   const summary = summaryQuery.data;
   const stats = summary.stats;
+  const { hasPermission } = useAuth();
 
   const quickActions = [
-    { label: 'Kelola Presensi', desc: 'Monitoring & edit presensi', path: '/dashboard/attendance-monitoring', icon: Activity },
-    { label: 'Data Karyawan', desc: 'Daftar barista & staff toko', path: '/dashboard/employees', icon: Users },
-    { label: 'Jadwal Shift', desc: 'Atur penugasan jam kerja', path: '/dashboard/shifts', icon: CalendarClock },
-    { label: 'Laporan Absensi', desc: 'Cetak & unduh rekap data', path: '/dashboard/reports', icon: ListCheck }
-  ];
-
+    hasPermission('attendance.view') && { label: 'Kelola Presensi', desc: 'Monitoring & edit presensi', path: '/dashboard/attendance-monitoring', icon: Activity },
+    hasPermission('employee.view') && { label: 'Data Karyawan', desc: 'Daftar barista & staff toko', path: '/dashboard/employees', icon: Users },
+    hasPermission('shift.view') && { label: 'Jadwal Shift', desc: 'Atur penugasan jam kerja', path: '/dashboard/shifts', icon: CalendarClock },
+    hasPermission('reports.view') && { label: 'Laporan Absensi', desc: 'Cetak & unduh rekap data', path: '/dashboard/reports', icon: ListCheck }
+  ].filter(Boolean) as Array<{ label: string; desc: string; path: string; icon: typeof Activity }>;
   return (
     <div className="space-y-6">
       {/* Store Operations Real Header */}

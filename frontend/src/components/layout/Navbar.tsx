@@ -18,7 +18,12 @@ export default function Navbar({
 }) {
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
-  const { user, logout } = useAuth();
+  const { user, logout, hasPermission } = useAuth();
+  const quickActionRoute = hasPermission('request_center.view')
+    ? '/dashboard/requests'
+    : hasPermission('shift.view')
+      ? '/dashboard/shifts'
+      : '/dashboard';
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [accountDialog, setAccountDialog] = useState<'profile' | 'password' | null>(null);
   const [pendingCount, setPendingCount] = useState<number>(0);
@@ -85,7 +90,7 @@ export default function Navbar({
         <div className="flex items-center gap-2 sm:gap-3">
           <button
             type="button"
-            onClick={() => navigate(user?.role === 'Karyawan' ? '/dashboard/shifts' : '/dashboard/requests')}
+            onClick={() => navigate(quickActionRoute)}
             className="relative inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white/80 text-slate-600 shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
             aria-label="Notifications"
             title={pendingCount > 0 ? `${pendingCount} pengajuan memerlukan tindakan` : 'Request Center Notifikasi'}

@@ -96,10 +96,11 @@ export const profile = async (req: AuthRequest, res: Response) => {
 
 export const updateProfile = async (req: AuthRequest, res: Response) => {
   try {
-    const isAdminOrCanEdit = req.user?.role?.name === 'Administrator' || (Array.isArray(req.user?.permissions) && req.user.permissions.includes('user_management.edit_user'));
+    const isAdmin = req.user?.role?.name === 'Administrator';
+    const canEditUser = isAdmin || (Array.isArray(req.user?.permissions) && req.user.permissions.includes('user_management.edit_user'));
 
-    if (!isAdminOrCanEdit) {
-      return res.status(403).json({ message: 'Username hanya dapat diubah oleh Administrator.' });
+    if (!canEditUser) {
+      return res.status(403).json({ message: 'Username hanya dapat diubah oleh pengguna dengan izin user_management.edit_user.' });
     }
 
     const username = typeof req.body?.username === 'string' ? req.body.username.trim() : '';

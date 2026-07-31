@@ -3,13 +3,12 @@ import { useAuth } from '@/context/AuthContext';
 import { LoadingScreen } from '@/components/ui/Loading';
 
 interface ProtectedRouteProps {
-  allowedRoles?: string[];
   requiredPermission?: string;
   children?: React.ReactNode;
 }
 
-export default function ProtectedRoute({ allowedRoles, requiredPermission, children }: ProtectedRouteProps) {
-  const { isAuthenticated, isLoading, user, hasPermission } = useAuth();
+export default function ProtectedRoute({ requiredPermission, children }: ProtectedRouteProps) {
+  const { isAuthenticated, isLoading, hasPermission } = useAuth();
 
   if (isLoading) {
     return <LoadingScreen />;
@@ -19,12 +18,8 @@ export default function ProtectedRoute({ allowedRoles, requiredPermission, child
     return <Navigate to="/login" replace />;
   }
 
-  if (allowedRoles && user && !allowedRoles.includes(user.role) && user.role !== 'Administrator') {
-    return <Navigate to="/dashboard" replace />;
-  }
-
   if (requiredPermission && !hasPermission(requiredPermission)) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   return children ? <>{children}</> : <Outlet />;

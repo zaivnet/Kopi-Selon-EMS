@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
@@ -14,7 +14,16 @@ export default function ShiftListPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isAssignOpen, setIsAssignOpen] = useState(false);
   const [selectedShift, setSelectedShift] = useState<any>(null);
-  const { user, hasPermission } = useAuth();
+  const { user, hasPermission, refreshUser } = useAuth();
+  const [permissionsReady, setPermissionsReady] = useState(false);
+
+  useEffect(() => {
+    refreshUser()
+      .catch(() => {
+        // ignore refresh errors in UI load
+      })
+      .finally(() => setPermissionsReady(true));
+  }, []);
 
   // Fetch shifts
   const {
@@ -60,7 +69,7 @@ export default function ShiftListPage() {
     }
   };
 
-  if (loadingShifts || (canViewEmployees && loadingEmployees)) {
+  if (!permissionsReady || loadingShifts || (canViewEmployees && loadingEmployees)) {
     return (
       <div className="flex h-64 items-center justify-center">
         <div className="flex items-center gap-3 text-sm text-slate-500">
@@ -70,12 +79,17 @@ export default function ShiftListPage() {
     );
   }
 
-  // Render workspace based on User Role
-  const roleName = user?.role || 'Karyawan';
+  const canCreateShift = hasPermission('shift.create');
+  const canEditShift = hasPermission('shift.edit');
+  const canDeleteShift = hasPermission('shift.delete');
+  const canViewShift = hasPermission('shift.view');
+  const isAdminWorkspace = canCreateShift && canEditShift && canDeleteShift;
+  const isStaffWorkspace = !isAdminWorkspace && (canCreateShift || canEditShift);
+  const isOwnerWorkspace = !isAdminWorkspace && !isStaffWorkspace && canViewShift;
 
   return (
     <div>
-      {roleName === 'Administrator' && (
+      {isAdminWorkspace && (
         <AdminShiftWorkspace
           shifts={shifts}
           employees={employees}
@@ -92,18 +106,24 @@ export default function ShiftListPage() {
         />
       )}
 
-      {roleName === 'Staff' && (
+      {isStaffWorkspace && (
         <StaffShiftWorkspace
           shifts={shifts}
           employees={employees}
-          canAssign={true}
+          canAssign={canEditShift}
+          canCreate={canCreateShift}
           onAssignClick={() => setIsAssignOpen(true)}
+          onAddShift={canCreateShift ? () => {
+            setSelectedShift(null);
+            setIsFormOpen(true);
+          } : undefined}
         />
       )}
 
-      {roleName === 'Owner' && <OwnerShiftWorkspace shifts={shifts} employees={employees} />}
+      {isOwnerWorkspace && <OwnerShiftWorkspace shifts={shifts} employees={employees} />}
 
-      {roleName === 'Karyawan' && <EmployeeShiftWorkspace user={user} />}
+      {!isAdminWorkspace && !isStaffWorkspace && isOwnerWorkspace && null}
+      {!isAdminWorkspace && !isStaffWorkspace && !isOwnerWorkspace && canViewShift && <EmployeeShiftWorkspace user={user} />}
 
       {/* Modals for Create/Edit and Assign */}
       {isFormOpen && (

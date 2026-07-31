@@ -21,8 +21,8 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>;
 
 export default function CompanyProfilePage() {
-  const { user } = useAuth();
-  const isAdmin = user?.role === 'Administrator';
+  const { user, hasPermission } = useAuth();
+  const canEditCompanyProfile = hasPermission('company_profile.edit');
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
   const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -112,7 +112,7 @@ export default function CompanyProfilePage() {
           <h1 className="text-3xl font-bold tracking-tight">Profil Perusahaan</h1>
           <p className="text-muted-foreground">Kelola informasi publik dan detail operasional usaha Anda.</p>
         </div>
-        {isAdmin && !isEditing && (
+        {canEditCompanyProfile && !isEditing && (
           <button
             onClick={() => setIsEditing(true)}
             className="px-4 py-2 bg-primary text-primary-foreground rounded-md shadow hover:bg-primary/90 transition-colors font-medium"

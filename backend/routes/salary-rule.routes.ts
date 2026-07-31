@@ -1,11 +1,11 @@
 import { Router } from 'express';
 import { getActiveRule, getHistory, updateRule } from '../controllers/salary-rule.controller.js';
-import { authenticate, authorize } from '../middleware/auth.middleware.js';
+import { authenticate, authorizePermission } from '../middleware/auth.middleware.js';
 
 const router = Router();
 
 router.use(authenticate);
-router.use(authorize(['Administrator', 'Owner']));
+router.use(authorizePermission('salary.calculate'));
 
 router.get('/active', getActiveRule);
 router.get('/history', getHistory);

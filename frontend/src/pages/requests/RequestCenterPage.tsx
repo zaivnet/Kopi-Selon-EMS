@@ -73,7 +73,7 @@ interface RequestItem {
 }
 
 export default function RequestCenterPage() {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [shifts, setShifts] = useState<Shift[]>([]);
@@ -108,7 +108,7 @@ export default function RequestCenterPage() {
   const [uploadingFile, setUploadingFile] = useState(false);
   const [submittingForm, setSubmittingForm] = useState(false);
 
-  const isStaffOrAdmin = user?.role === 'Administrator' || user?.role === 'Owner' || user?.role === 'Staff';
+  const canApproveRequest = hasPermission('request_center.approve');
 
   const getAuthToken = () => localStorage.getItem('token') || sessionStorage.getItem('token');
   const getAuthHeaders = () => ({ headers: { Authorization: `Bearer ${getAuthToken()}` } });
@@ -415,20 +415,24 @@ export default function RequestCenterPage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setIsSwapDrawerOpen(true)}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-amber-900/60 px-4 py-3 text-sm font-semibold text-amber-100 shadow-lg backdrop-blur-md transition hover:-translate-y-0.5 hover:bg-amber-900/80"
-            >
-              <ArrowLeftRight className="h-4 w-4" /> Ajukan Tukar Shift
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowCreateModal(true)}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-[#6F4E37] shadow-lg transition hover:-translate-y-0.5 hover:bg-amber-50 dark:bg-slate-900 dark:text-amber-200 dark:hover:bg-slate-800"
-            >
-              <Plus className="h-4 w-4" /> Buat Permintaan
-            </button>
+              {hasPermission('request_center.create') && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setIsSwapDrawerOpen(true)}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-amber-900/60 px-4 py-3 text-sm font-semibold text-amber-100 shadow-lg backdrop-blur-md transition hover:-translate-y-0.5 hover:bg-amber-900/80"
+                >
+                  <ArrowLeftRight className="h-4 w-4" /> Ajukan Tukar Shift
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(true)}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-[#6F4E37] shadow-lg transition hover:-translate-y-0.5 hover:bg-amber-50 dark:bg-slate-900 dark:text-amber-200 dark:hover:bg-slate-800"
+                >
+                  <Plus className="h-4 w-4" /> Buat Permintaan
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -1079,7 +1083,7 @@ export default function RequestCenterPage() {
                 )}
 
               {/* If Staff / Admin Approval Pending */}
-              {selectedRequest.status === 'Waiting Staff Approval' && isStaffOrAdmin && (
+              {selectedRequest.status === 'Waiting Staff Approval' && canApproveRequest && (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50/50 p-4 dark:border-amber-900/50 dark:bg-amber-950/20">
                   <p className="text-xs font-semibold text-amber-800 dark:text-amber-300 mb-2">
                     Tindakan Administrator / Staff:
@@ -1116,7 +1120,7 @@ export default function RequestCenterPage() {
               {['Submitted', 'Waiting Employee Approval', 'Waiting Staff Approval', 'Draft'].includes(
                 selectedRequest.status
               ) &&
-                (selectedRequest.employee?.user?.username === user?.username || user?.role === 'Administrator') && (
+                (selectedRequest.employee?.user?.username === user?.username || canApproveRequest) && (
                   <div className="mt-3 flex justify-start">
                     <button
                       type="button"

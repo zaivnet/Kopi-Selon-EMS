@@ -1,6 +1,7 @@
 import bcrypt from 'bcrypt';
 import { prisma } from '../lib/prisma.js';
 import { HIDDEN_ROLES } from '../lib/constants.js';
+const STAFF_ASSIGNABLE_ROLES = ['Staff', 'Karyawan'];
 export const getMyEmployeeProfile = async (req, res) => {
     try {
         const userId = req.user?.id;
@@ -103,6 +104,13 @@ export const createEmployee = async (req, res) => {
         if (!username || !password || !roleId || !firstName) {
             return res.status(400).json({ message: 'Username, password, role, dan nama karyawan wajib diisi' });
         }
+        const currentUserRole = req.user?.role?.name || req.user?.role;
+        if (currentUserRole === 'Staff') {
+            const selectedRole = await prisma.role.findUnique({ where: { id: roleId } });
+            if (selectedRole && !STAFF_ASSIGNABLE_ROLES.includes(selectedRole.name)) {
+                return res.status(403).json({ message: 'Staff hanya boleh menetapkan role Staff atau Karyawan.' });
+            }
+        }
         // Check if username exists
         const existingUser = await prisma.user.findFirst({
             where: { username: username.trim() }
@@ -153,6 +161,13 @@ export const updateEmployee = async (req, res) => {
         });
         if (!employee)
             return res.status(404).json({ message: 'Employee not found' });
+        const currentUserRole = req.user?.role?.name || req.user?.role;
+        if (roleId && roleId !== employee.user.roleId && currentUserRole === 'Staff') {
+            const selectedRole = await prisma.role.findUnique({ where: { id: roleId } });
+            if (selectedRole && !STAFF_ASSIGNABLE_ROLES.includes(selectedRole.name)) {
+                return res.status(403).json({ message: 'Staff hanya boleh menetapkan role Staff atau Karyawan.' });
+            }
+        }
         // Handle username check if provided
         const newUsername = (typeof reqUsername === 'string' && reqUsername.trim()) ? reqUsername.trim() : null;
         if (newUsername && newUsername !== employee.user.username) {
@@ -198,6 +213,13 @@ export const updateEmployee = async (req, res) => {
                 userUpdateData.username = newUsername;
             }
             if (roleId && roleId !== employee.user.roleId) {
+                const currentUserRole = req.user?.role?.name || req.user?.role;
+                if (currentUserRole === 'Staff') {
+                    const selectedRole = await tx.role.findUnique({ where: { id: roleId } });
+                    if (selectedRole && !STAFF_ASSIGNABLE_ROLES.includes(selectedRole.name)) {
+                        throw new Error('Staff hanya boleh menetapkan role Staff atau Karyawan.');
+                    }
+                }
                 userUpdateData.roleId = roleId;
             }
             if (typeof reqPassword === 'string' && reqPassword.trim().length > 0) {

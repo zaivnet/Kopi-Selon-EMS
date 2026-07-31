@@ -6,15 +6,15 @@ import StaffDashboard from './components/StaffDashboard';
 import EmployeePortalDashboard from './components/EmployeePortalDashboard';
 
 export default function DashboardPage() {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
 
   if (!user) return null;
 
   const role = typeof user.role === 'string' ? user.role : (user.role as any)?.name || '';
-  const isAdmin = role === 'Administrator';
-  const isOwner = role === 'Owner';
-  const isStaff = role === 'Staff';
-  const isEmployee = role === 'Karyawan';
+  const isAdmin = role === 'Administrator' || hasPermission('user_management.edit_user');
+  const isOwner = !isAdmin && (role === 'Owner' || (hasPermission('reports.view') && !hasPermission('request_center.approve')));
+  const isStaff = !isAdmin && !isOwner && (role === 'Staff' || hasPermission('request_center.approve'));
+  const isEmployee = !isAdmin && !isOwner && !isStaff;
 
   const roleConfig = {
     Administrator: { icon: ShieldCheck, badge: 'System Central', desc: 'Kelola absensi, data karyawan, shift, & audit log operasional' },

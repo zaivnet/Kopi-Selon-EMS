@@ -8,9 +8,9 @@ import { useAuth } from '@/context/AuthContext';
 import dayjs from 'dayjs';
 
 export default function SalaryRulePage() {
-  const { user } = useAuth();
+  const { hasPermission } = useAuth();
   const queryClient = useQueryClient();
-  const isAdminOrOwner = user?.role === 'Administrator' || user?.role === 'Owner';
+  const canManageSalaryRules = hasPermission('salary.calculate');
 
   const [absentDeduction, setAbsentDeduction] = useState('');
   const [lateDeductionPerMinute, setLateDeductionPerMinute] = useState('');
@@ -85,13 +85,13 @@ export default function SalaryRulePage() {
   const totalSimDeduction = simLate + simUnder + simAbsent;
   const simNetSalary = Math.max(0, simBase - totalSimDeduction);
 
-  if (!isAdminOrOwner) {
+  if (!canManageSalaryRules) {
     return (
       <div className="flex min-h-[300px] flex-col items-center justify-center p-8 text-center">
         <AlertCircle className="h-12 w-12 text-amber-600 mb-3" />
         <h2 className="text-lg font-bold text-slate-800 dark:text-amber-100">Akses Dibatasi</h2>
         <p className="text-sm text-slate-500 dark:text-amber-300/70">
-          Menu Pengaturan Aturan Gaji hanya dapat diakses oleh Administrator dan Owner.
+          Anda tidak memiliki izin untuk mengelola aturan gaji. Hubungi administrator untuk menambahkan izin yang sesuai.
         </p>
       </div>
     );

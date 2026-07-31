@@ -27,14 +27,18 @@ interface StaffShiftWorkspaceProps {
   shifts: Shift[];
   employees: any[];
   canAssign: boolean;
+  canCreate: boolean;
   onAssignClick: () => void;
+  onAddShift?: () => void;
 }
 
 export default function StaffShiftWorkspace({
   shifts = [],
   employees = [],
   canAssign,
+  canCreate,
   onAssignClick,
+  onAddShift,
 }: StaffShiftWorkspaceProps) {
   const navigate = useNavigate();
   const [selectedShiftFilter, setSelectedShiftFilter] = useState<string>('ALL');
@@ -58,6 +62,15 @@ export default function StaffShiftWorkspace({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {canCreate && onAddShift && (
+              <button
+                type="button"
+                onClick={onAddShift}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-xs font-bold text-slate-900 shadow-lg transition hover:-translate-y-0.5 hover:bg-blue-50"
+              >
+                <Plus className="h-4 w-4 text-blue-600" /> Tambah Shift
+              </button>
+            )}
             {canAssign && (
               <button
                 type="button"

@@ -26,9 +26,11 @@ let DefaultIcon = L.icon({
 L.Marker.prototype.options.icon = DefaultIcon;
 
 export default function SettingsPage() {
-  const { user } = useAuth();
-  const isAdmin = user?.role === 'Administrator';
-  const [activeTab, setActiveTab] = useState(isAdmin ? 'location' : 'appearance');
+  const { hasPermission } = useAuth();
+  const canEditSettings = hasPermission('settings.edit');
+  const canViewAuditLog = hasPermission('audit_log.view');
+  const canUseBackup = hasPermission('backup_restore.backup');
+  const [activeTab, setActiveTab] = useState(canEditSettings ? 'location' : 'appearance');
   const { theme, setTheme } = useTheme();
   
   return (
@@ -40,12 +42,12 @@ export default function SettingsPage() {
 
       <div className="flex overflow-x-auto space-x-2 border-b border-border pb-px">
         {[
-          { id: 'location', label: 'Lokasi & Absensi', icon: MapPin },
-          { id: 'salary', label: 'Toleransi & Potongan', icon: Calculator },
-          { id: 'appearance', label: 'Tampilan', icon: Sun },
-          { id: 'database', label: 'Backup & Restore', icon: Database },
-          { id: 'audit', label: 'Audit Log', icon: History },
-        ].filter(tab => isAdmin || tab.id === 'appearance').map(tab => (
+          { id: 'location', label: 'Lokasi & Absensi', icon: MapPin, visible: canEditSettings },
+          { id: 'salary', label: 'Toleransi & Potongan', icon: Calculator, visible: canEditSettings },
+          { id: 'appearance', label: 'Tampilan', icon: Sun, visible: true },
+          { id: 'database', label: 'Backup & Restore', icon: Database, visible: canUseBackup },
+          { id: 'audit', label: 'Audit Log', icon: History, visible: canViewAuditLog },
+        ].filter(tab => tab.visible).map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}

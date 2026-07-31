@@ -20,6 +20,16 @@ export const generatePayroll = async (req, res) => {
                 end += 24 * 60; // overnight shift
             return end - start;
         };
+        // Fetch holidays in the period
+        const periodStart = new Date(periodYear, periodMonth - 1, 1);
+        const periodEnd = new Date(periodYear, periodMonth, 1);
+        const holidays = await prisma.holiday.findMany({
+            where: {
+                date: { gte: periodStart, lt: periodEnd },
+                deletedAt: null,
+            },
+        });
+        const holidayCount = holidays.length;
         const employees = await prisma.employee.findMany({
             where: {
                 deletedAt: null,
@@ -35,8 +45,8 @@ export const generatePayroll = async (req, res) => {
                 attendances: {
                     where: {
                         date: {
-                            gte: new Date(periodYear, periodMonth - 1, 1),
-                            lt: new Date(periodYear, periodMonth, 1)
+                            gte: periodStart,
+                            lt: periodEnd
                         },
                         deletedAt: null
                     }
@@ -46,8 +56,8 @@ export const generatePayroll = async (req, res) => {
                         status: 'APPROVED',
                         deletedAt: null,
                         startDate: {
-                            gte: new Date(periodYear, periodMonth - 1, 1),
-                            lt: new Date(periodYear, periodMonth, 1)
+                            gte: periodStart,
+                            lt: periodEnd
                         }
                     }
                 },
@@ -56,8 +66,8 @@ export const generatePayroll = async (req, res) => {
                         status: 'APPROVED',
                         deletedAt: null,
                         date: {
-                            gte: new Date(periodYear, periodMonth - 1, 1),
-                            lt: new Date(periodYear, periodMonth, 1)
+                            gte: periodStart,
+                            lt: periodEnd
                         }
                     }
                 }
@@ -101,10 +111,22 @@ export const generatePayroll = async (req, res) => {
             }
             const lateDeduction = lateMins * rule.lateDeductionPerMinute;
             const underworkDeduction = underworkHours * rule.underworkDeductionPerHour;
-            // Calculate absences excluding approved leaves & permissions
-            const attendedDays = emp.attendances.length;
-            const approvedLeaveDays = emp.leaves.length + emp.permissions.length;
-            const totalValidDays = attendedDays + approvedLeaveDays;
+            // Calculate unique attended days
+            const uniqueAttendedDates = new Set(emp.attendances
+                .filter(att => att.clockIn && att.clockOut)
+                .map(att => new Date(att.date).toISOString().slice(0, 10)));
+            const attendedDays = uniqueAttendedDates.size;
+            // Calculate total leave duration in days
+            let approvedLeaveDays = 0;
+            for (const leave of emp.leaves) {
+                const start = new Date(leave.startDate);
+                const end = new Date(leave.endDate || leave.startDate);
+                const diffMs = Math.abs(end.getTime() - start.getTime());
+                const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24)) + 1;
+                approvedLeaveDays += diffDays;
+            }
+            approvedLeaveDays += emp.permissions.length;
+            const totalValidDays = attendedDays + approvedLeaveDays + holidayCount;
             absentDays = Math.max(0, 26 - totalValidDays);
             const absentDeduction = absentDays * rule.absentDeduction;
             if (lateDeduction > 0)

@@ -1,4 +1,5 @@
 import { prisma } from '../lib/prisma.js';
+import { sortRolesByHierarchy } from '../lib/constants.js';
 const ALL_PERMISSION_IDS = [
     'dashboard.view',
     'employee.view', 'employee.create', 'employee.edit', 'employee.delete',
@@ -67,18 +68,9 @@ async function ensureRolesExist() {
                 });
             }
         }
-        else if (DEFAULT_PERMISSIONS[roleName]) {
-            // Auto-grant missing permissions
-            const currentPerms = new Set(existing.permissions.map(p => p.permissionId));
-            const missing = DEFAULT_PERMISSIONS[roleName].filter(pId => !currentPerms.has(pId));
-            if (missing.length > 0) {
-                await prisma.rolePermission.createMany({
-                    data: missing.map(pId => ({
-                        roleId: existing.id,
-                        permissionId: pId
-                    }))
-                });
-            }
+        else {
+            // Do not auto-grant missing permissions for existing roles.
+            // Admin-managed Role & Permissions should be authoritative.
         }
     }
 }
@@ -89,15 +81,6 @@ export const getRoles = async (req, res) => {
             where: { deletedAt: null },
             include: { permissions: true }
         });
-        // Auto-seed permissions if empty for any role
-        for (const role of roles) {
-            if (role.permissions.length === 0 && DEFAULT_PERMISSIONS[role.name]) {
-                const defaultPerms = DEFAULT_PERMISSIONS[role.name];
-                await prisma.rolePermission.createMany({
-                    data: defaultPerms.map(pId => ({ roleId: role.id, permissionId: pId }))
-                });
-            }
-        }
         // Refetch roles with permissions
         roles = await prisma.role.findMany({
             where: { deletedAt: null },
@@ -109,7 +92,8 @@ export const getRoles = async (req, res) => {
             description: role.description,
             permissions: role.permissions.map(p => p.permissionId)
         }));
-        res.json(formattedRoles);
+        const sortedRoles = sortRolesByHierarchy(formattedRoles);
+        res.json(sortedRoles);
     }
     catch (error) {
         console.error('getRoles Error:', error);

@@ -104,7 +104,7 @@ function DialogShell({ title, description, onClose, busy, initialFocusRef, child
 
 export function AccountDialogs({ active, onClose }: { active: DialogName; onClose: () => void }) {
   const { user, updateCurrentUser, hasPermission } = useAuth();
-  const canEditUsername = user?.role === 'Administrator' || hasPermission('user_management.edit_user');
+  const canEditUsername = hasPermission('user_management.edit_user');
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [profileForm, setProfileForm] = useState({ username: '' });
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmation: '' });

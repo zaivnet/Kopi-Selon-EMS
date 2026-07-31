@@ -44,16 +44,11 @@ const saveImage = (image) => {
     return { filepath, url: `/uploads/${filename}` };
 };
 const findAttendanceEmployee = async (req, res) => {
-    const role = req.user?.role?.name;
-    if (!['Karyawan', 'Staff'].includes(role)) {
-        res.status(403).json({ message: 'Absensi selfie hanya tersedia untuk Karyawan dan Staff.' });
-        return null;
-    }
     const employee = await prisma.employee.findFirst({
         where: { userId: req.user.id, deletedAt: null, status: 'ACTIVE' }
     });
     if (!employee) {
-        res.status(403).json({ message: role === 'Staff' ? 'Akun Staff belum terhubung ke data karyawan aktif. Hubungi administrator.' : 'Data karyawan aktif tidak ditemukan.' });
+        res.status(403).json({ message: 'Profil karyawan aktif tidak ditemukan. Hubungi administrator jika Anda seharusnya memiliki akses absensi.' });
         return null;
     }
     return employee;
