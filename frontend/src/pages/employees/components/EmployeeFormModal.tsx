@@ -27,7 +27,7 @@ export default function EmployeeFormModal({ employee, onClose, onSuccess }: { em
 
   const { user, hasPermission } = useAuth();
   const [roles, setRoles] = useState<any[]>([]);
-  const STAFF_ASSIGNABLE_ROLES = ['Staff', 'Karyawan'];
+  const STAFF_ASSIGNABLE_ROLES = ['Karyawan'];
   const isStaffLikeRole = !hasPermission('user_management.edit_user') && (hasPermission('employee.edit') || hasPermission('employee.create'));
 
   useEffect(() => {

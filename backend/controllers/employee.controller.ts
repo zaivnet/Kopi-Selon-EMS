@@ -4,7 +4,7 @@ import { prisma } from '../lib/prisma.js';
 import { AuthRequest } from '../middleware/auth.middleware.js';
 import { HIDDEN_ROLES } from '../lib/constants.js';
 
-const STAFF_ASSIGNABLE_ROLES = ['Staff', 'Karyawan'];
+const STAFF_ASSIGNABLE_ROLES = ['Karyawan'];
 
 export const getMyEmployeeProfile = async (req: AuthRequest, res: Response) => {
   try {

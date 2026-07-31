@@ -9,7 +9,7 @@ export const HIDDEN_ROLES = ['Administrator'];
  * Roles that are considered operational workers
  * (visible in all employee-facing views).
  */
-export const WORKER_ROLES = ['Karyawan', 'Staff'];
+export const WORKER_ROLES = ['Karyawan'];
 /**
  * Prisma filter to exclude hidden roles from any employee query.
  * Usage: where: { deletedAt: null, ...EXCLUDE_HIDDEN_ROLES }

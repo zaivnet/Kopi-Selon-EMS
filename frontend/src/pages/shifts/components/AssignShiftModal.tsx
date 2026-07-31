@@ -64,7 +64,7 @@ export default function AssignShiftModal({ shifts, onClose, onSuccess }: Props) 
   const activeEmployees = useMemo(() => {
     if (!Array.isArray(employees)) return [];
 
-    const WORKER_ROLES = ['Karyawan', 'Staff'];
+    const WORKER_ROLES = ['Karyawan'];
 
   return employees.filter((employee) => {
       const role = employee.user?.role?.name;

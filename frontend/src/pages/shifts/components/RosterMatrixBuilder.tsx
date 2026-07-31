@@ -57,11 +57,11 @@ export default function RosterMatrixBuilder({
   const [patternInput, setPatternInput] = useState<string[]>([]);
   const [isPatternModalOpen, setIsPatternModalOpen] = useState<boolean>(false);
 
-  // Filter employees to Karyawan & Staff
+  // Filter employees to Karyawan role only
   const workerEmployees = useMemo(() => {
     return employees.filter((emp) => {
       const roleName = emp.user?.role?.name;
-      return !roleName || ['Karyawan', 'Staff'].includes(roleName);
+      return !roleName || roleName === 'Karyawan';
     });
   }, [employees]);
 

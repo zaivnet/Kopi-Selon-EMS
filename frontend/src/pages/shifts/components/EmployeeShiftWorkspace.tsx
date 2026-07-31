@@ -235,7 +235,7 @@ export default function EmployeeShiftWorkspace({ user }: EmployeeShiftWorkspaceP
     // Filter active worker employees (Karyawan & Staff)
     const filteredEmps = allEmployees.filter((emp) => {
       const roleName = emp.user?.role?.name;
-      const isWorker = !roleName || ['Karyawan', 'Staff'].includes(roleName);
+      const isWorker = !roleName || roleName === 'Karyawan';
       if (!isWorker) return false;
 
       if (!rosterSearchQuery.trim()) return true;

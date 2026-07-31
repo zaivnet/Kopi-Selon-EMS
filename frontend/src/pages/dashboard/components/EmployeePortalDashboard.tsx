@@ -104,7 +104,7 @@ export default function EmployeePortalDashboard() {
 
     const workerEmployees = employees.filter((emp: any) => {
       const roleName = emp.user?.role?.name;
-      return !roleName || ['Karyawan', 'Staff'].includes(roleName);
+      return !roleName || roleName === 'Karyawan';
     });
 
     return days.map((d) => {
