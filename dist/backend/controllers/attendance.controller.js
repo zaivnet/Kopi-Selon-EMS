@@ -39,13 +39,18 @@ const parsePhoto = (photo) => {
 };
 const saveImage = (image) => {
     const filename = `${uuidv4()}.${image.extension}`;
-    const filepath = path.resolve(process.cwd(), 'uploads', filename);
+    const uploadDir = path.resolve(process.cwd(), 'uploads');
+    if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    const filepath = path.join(uploadDir, filename);
     fs.writeFileSync(filepath, image.buffer);
     return { filepath, url: `/uploads/${filename}` };
 };
 const findAttendanceEmployee = async (req, res) => {
     const employee = await prisma.employee.findFirst({
-        where: { userId: req.user.id, deletedAt: null, status: 'ACTIVE' }
+        where: { userId: req.user.id, deletedAt: null, status: 'ACTIVE' },
+        include: { shift: true }
     });
     if (!employee) {
         res.status(403).json({ message: 'Profil karyawan aktif tidak ditemukan. Hubungi administrator jika Anda seharusnya memiliki akses absensi.' });
@@ -229,12 +234,36 @@ export const submitAttendance = async (req, res) => {
         writtenPhotoPath = savedPhoto.filepath;
         const ipAddress = req.ip || req.socket.remoteAddress || '';
         if (type === 'CHECK_IN') {
+            let attendanceStatus = 'PRESENT';
+            const now = new Date();
+            // Check shift and late tolerance
+            const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+            const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+            const shiftAssignment = await prisma.workSchedule.findFirst({
+                where: {
+                    employeeId: employee.id,
+                    date: { gte: todayStart, lte: todayEnd },
+                    deletedAt: null
+                },
+                include: { shift: true }
+            });
+            const activeShift = shiftAssignment?.shift || employee.shift;
+            if (activeShift) {
+                const [startHour, startMin] = activeShift.startTime.split(':').map(Number);
+                const shiftStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), startHour, startMin, 0);
+                const toleranceSetting = await prisma.setting.findFirst({ where: { key: 'LATE_TOLERANCE_MINUTES', deletedAt: null } });
+                const toleranceMins = toleranceSetting ? (parseInt(toleranceSetting.value, 10) || 15) : 15;
+                const lateThreshold = new Date(shiftStart.getTime() + toleranceMins * 60 * 1000);
+                if (now > lateThreshold) {
+                    attendanceStatus = 'LATE';
+                }
+            }
             attendance = await prisma.attendance.create({
                 data: {
                     employeeId: employee.id,
-                    date: new Date(),
-                    clockIn: new Date(),
-                    status: 'PRESENT', // default, can be LATE logic later
+                    date: now,
+                    clockIn: now,
+                    status: attendanceStatus,
                     photos: {
                         create: {
                             photoUrl: savedPhoto.url,

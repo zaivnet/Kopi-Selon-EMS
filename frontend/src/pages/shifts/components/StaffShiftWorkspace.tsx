@@ -14,6 +14,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import RosterMatrixBuilder from './RosterMatrixBuilder';
 
 interface Shift {
   id: string;
@@ -215,36 +216,9 @@ export default function StaffShiftWorkspace({
         </div>
       </div>
 
-      {/* CALENDAR SHIFT OPERATIONS */}
+      {/* ROSTER MATRIX BUILDER (SPREADSHEET EXCEL MODE) */}
       <div className="rounded-3xl border border-slate-200/80 bg-white/80 p-6 shadow-sm backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/70">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-4 dark:border-slate-800">
-          <h2 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-            <Calendar className="h-5 w-5 text-indigo-500" /> Calendar Shift Operations
-          </h2>
-          <span className="text-xs text-slate-500">Jadwal Operasional Harian</span>
-        </div>
-
-        <div className="mt-4 grid grid-cols-1 sm:grid-cols-7 gap-3 text-xs">
-          {['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'].map((day) => (
-            <div
-              key={day}
-              className="rounded-2xl border border-slate-200/80 bg-slate-50 p-3 text-center dark:border-slate-800 dark:bg-slate-950"
-            >
-              <p className="font-bold text-slate-700 dark:text-slate-200 mb-2">{day}</p>
-              <div className="space-y-1.5">
-                {shifts.map((s) => (
-                  <div
-                    key={s.id}
-                    className="rounded-lg bg-white p-1.5 shadow-sm dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800"
-                  >
-                    <p className="font-semibold text-slate-800 dark:text-slate-100">{s.name}</p>
-                    <p className="text-[10px] text-slate-400">{s.employees?.length || 0} Terjadwal</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
+        <RosterMatrixBuilder shifts={shifts} employees={employees} />
       </div>
     </div>
   );

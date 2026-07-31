@@ -168,3 +168,90 @@ export const assignShift = async (req: Request, res: Response) => {
     res.status(500).json({ message: 'Terjadi kesalahan server saat menyimpan penugasan shift.' });
   }
 };
+
+export const getWorkSchedules = async (req: Request, res: Response) => {
+  try {
+    const { month, year } = req.query;
+    let startDate: Date;
+    let endDate: Date;
+
+    if (month && typeof month === 'string' && month.includes('-')) {
+      const [y, m] = month.split('-').map(Number);
+      startDate = new Date(y, m - 1, 1, 0, 0, 0);
+      endDate = new Date(y, m, 0, 23, 59, 59);
+    } else {
+      const now = new Date();
+      const m = month ? parseInt(month as string, 10) - 1 : now.getMonth();
+      const y = year ? parseInt(year as string, 10) : now.getFullYear();
+      startDate = new Date(y, m, 1, 0, 0, 0);
+      endDate = new Date(y, m + 1, 0, 23, 59, 59);
+    }
+
+    const schedules = await prisma.workSchedule.findMany({
+      where: {
+        date: { gte: startDate, lte: endDate },
+        deletedAt: null
+      },
+      include: {
+        shift: true,
+        employee: {
+          select: { id: true, firstName: true, lastName: true }
+        }
+      }
+    });
+
+    res.json(schedules);
+  } catch (error) {
+    console.error('getWorkSchedules Error:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+export const bulkSaveWorkSchedules = async (req: Request, res: Response) => {
+  try {
+    const { schedules } = req.body;
+
+    if (!Array.isArray(schedules)) {
+      return res.status(400).json({ message: 'Payload schedules harus berupa array.' });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      let updatedCount = 0;
+
+      for (const item of schedules) {
+        if (!item.employeeId || !item.date) continue;
+        
+        const dateObj = new Date(item.date);
+        dateObj.setHours(0, 0, 0, 0);
+        const dayStart = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate(), 0, 0, 0);
+        const dayEnd = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate(), 23, 59, 59);
+
+        await tx.workSchedule.deleteMany({
+          where: {
+            employeeId: item.employeeId,
+            date: { gte: dayStart, lte: dayEnd }
+          }
+        });
+
+        if (item.shiftId && typeof item.shiftId === 'string' && item.shiftId !== 'OFF' && item.shiftId.trim() !== '') {
+          await tx.workSchedule.create({
+            data: {
+              employeeId: item.employeeId,
+              shiftId: item.shiftId.trim(),
+              date: dayStart
+            }
+          });
+          updatedCount++;
+        }
+      }
+
+      return updatedCount;
+    });
+
+    res.json({ message: 'Roster matriks berhasil disimpan.', count: result });
+  } catch (error) {
+    console.error('bulkSaveWorkSchedules Error:', error);
+    res.status(500).json({ message: 'Gagal menyimpan roster matriks.' });
+  }
+};
+

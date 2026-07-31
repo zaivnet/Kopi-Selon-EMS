@@ -17,6 +17,7 @@ import {
   Clock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import RosterMatrixBuilder from './RosterMatrixBuilder';
 
 interface Shift {
   id: string;
@@ -246,64 +247,9 @@ export default function AdminShiftWorkspace({
         </div>
       )}
 
-      {/* TAB 2: KALENDER SELURUH KARYAWAN */}
+      {/* TAB 2: KALENDER & ROSTER MATRIX BUILDER SELURUH KARYAWAN */}
       {activeTab === 'calendar' && (
-        <div className="rounded-3xl border border-slate-200/80 bg-white/80 p-6 shadow-sm backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/70">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-4 dark:border-slate-800">
-            <div>
-              <h2 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                <Calendar className="h-5 w-5 text-indigo-500" /> Kalender Matriks Shift Seluruh Karyawan
-              </h2>
-              <p className="text-xs text-slate-500">Tampilan lengkap penjadwalan minggu operasional</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => navigate('/dashboard/requests')}
-              className="text-xs font-bold text-[#6F4E37] dark:text-amber-300 hover:underline flex items-center gap-1"
-            >
-              Lihat Pengajuan Tukar/Ubah Shift <ChevronRight className="h-3.5 w-3.5" />
-            </button>
-          </div>
-
-          <div className="mt-6 overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 uppercase text-slate-500 dark:bg-slate-950">
-                <tr>
-                  <th className="p-3">Nama Karyawan</th>
-                  <th className="p-3">Shift Resmi</th>
-                  <th className="p-3">Sen</th>
-                  <th className="p-3">Sel</th>
-                  <th className="p-3">Rab</th>
-                  <th className="p-3">Kam</th>
-                  <th className="p-3">Jum</th>
-                  <th className="p-3">Sab</th>
-                  <th className="p-3">Min</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200/70 dark:divide-slate-800">
-                {employees.map((emp) => (
-                  <tr key={emp.id} className="hover:bg-amber-50/30 dark:hover:bg-slate-800/40">
-                    <td className="p-3 font-semibold text-slate-800 dark:text-slate-100">
-                      {emp.firstName} {emp.lastName || ''}
-                    </td>
-                    <td className="p-3">
-                      <span className="rounded-lg bg-slate-100 px-2 py-0.5 font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                        {emp.shift?.name || 'Tanpa Shift'}
-                      </span>
-                    </td>
-                    {['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'].map((day) => (
-                      <td key={day} className="p-3 text-center">
-                        <span className="inline-block rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
-                          {emp.shift?.name?.split(' ')[0] || 'Off'}
-                        </span>
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <RosterMatrixBuilder shifts={shifts} employees={employees} />
       )}
 
       {/* TAB 3: KEKURANGAN PERSONEL & KONFLIK JADWAL */}

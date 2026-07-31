@@ -16,8 +16,15 @@ async function generateRequestNumber(): Promise<string> {
     },
   });
 
-  const seq = String(countToday + 1).padStart(4, '0');
-  return `${prefix}${seq}`;
+  let seqNum = countToday + 1;
+  let reqNum = `${prefix}${String(seqNum).padStart(4, '0')}`;
+
+  while (await prisma.employeeRequest.findUnique({ where: { requestNumber: reqNum } })) {
+    seqNum++;
+    reqNum = `${prefix}${String(seqNum).padStart(4, '0')}`;
+  }
+
+  return reqNum;
 }
 
 export const getRequests = async (req: AuthRequest, res: Response) => {

@@ -73,18 +73,6 @@ export async function seedDatabase() {
                 });
             }
         }
-        else if (DEFAULT_PERMISSIONS[roleName]) {
-            const currentPerms = new Set(role.permissions.map(p => p.permissionId));
-            const missing = DEFAULT_PERMISSIONS[roleName].filter(pId => !currentPerms.has(pId));
-            if (missing.length > 0) {
-                await prisma.rolePermission.createMany({
-                    data: missing.map(pId => ({
-                        roleId: role.id,
-                        permissionId: pId
-                    }))
-                });
-            }
-        }
         rolesMap[roleName] = role;
     }
     // 2. Ensure initial Admin user exists
