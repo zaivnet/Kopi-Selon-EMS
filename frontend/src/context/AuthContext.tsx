@@ -6,7 +6,9 @@ export interface User {
   id: string;
   username: string;
   role: string;
+  email?: string;
   permissions?: string[];
+  employee?: any;
 }
 
 interface AuthContextType {
@@ -31,7 +33,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     id: data.id,
     username: data.username,
     role: typeof data.role === 'string' ? data.role : (data.role?.name || ''),
-    permissions: Array.isArray(data.permissions) ? data.permissions : []
+    permissions: Array.isArray(data.permissions) ? data.permissions : [],
+    employee: data.employee || null
   });
 
   const refreshUser = async () => {

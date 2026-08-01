@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Calendar,
   Save,
@@ -7,7 +7,6 @@ import {
   ChevronRight,
   RefreshCw,
   CheckCircle2,
-  Sparkles,
   Info,
   Clock,
   UserCheck

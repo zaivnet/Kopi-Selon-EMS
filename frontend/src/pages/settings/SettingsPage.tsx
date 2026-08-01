@@ -2,11 +2,11 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   MapPin, Settings as SettingsIcon, Database, Moon, Sun, 
-  History, ShieldAlert, Save, HardDriveDownload, HardDriveUpload, Clock, Calculator,
+  History, Save, HardDriveDownload, HardDriveUpload, Clock, Calculator,
   Crosshair, LoaderCircle
 } from 'lucide-react';
 import api from '@/lib/api';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { useTheme } from 'next-themes';
 import { useAuth } from '@/context/AuthContext';
 import { MapContainer, TileLayer, Marker, Circle, useMap, useMapEvents } from 'react-leaflet';
@@ -310,7 +310,7 @@ function SalaryTab() {
   const [underwork, setUnderwork] = useState('0');
   const [msg, setMsg] = useState('');
 
-  const { data: general } = useQuery({
+  const { data: _general } = useQuery({
     queryKey: ['generalSettings'],
     queryFn: async () => {
       const res = await api.get('/settings/general');
@@ -320,7 +320,7 @@ function SalaryTab() {
     }
   });
 
-  const { data: rules } = useQuery({
+  const { data: _rules } = useQuery({
     queryKey: ['activeSalaryRuleSetting'],
     queryFn: async () => {
       const res = await api.get('/salary-rules/active');
@@ -477,7 +477,7 @@ function DatabaseTab() {
       link.setAttribute('download', 'backup_kopi_selon.db');
       document.body.appendChild(link);
       link.click();
-      link.parentNode.removeChild(link);
+      link.parentNode?.removeChild(link);
       setMsg({ text: 'Backup berhasil diunduh.', type: 'success' });
       setTimeout(() => setMsg({ text: '', type: '' }), 3000);
     } catch (error) {

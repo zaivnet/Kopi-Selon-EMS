@@ -5,7 +5,6 @@ import dayjs from 'dayjs';
 import {
   AlertCircle,
   Calendar,
-  Camera as CameraIcon,
   CheckCircle2,
   Clock3,
   Coffee,

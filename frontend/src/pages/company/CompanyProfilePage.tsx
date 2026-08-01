@@ -21,7 +21,7 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>;
 
 export default function CompanyProfilePage() {
-  const { user, hasPermission } = useAuth();
+  const { hasPermission } = useAuth();
   const canEditCompanyProfile = hasPermission('company_profile.edit');
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);

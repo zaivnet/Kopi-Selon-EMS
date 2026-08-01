@@ -22,6 +22,23 @@ export const getReportData = async (req: Request, res: Response) => {
       where: employeeFilter,
       include: {
         shift: true,
+        workSchedules: {
+          where: {
+            deletedAt: null,
+            ...(startDate && endDate ? {
+              date: {
+                gte: new Date(String(startDate)),
+                lt: new Date(new Date(String(endDate)).getTime() + 24 * 60 * 60 * 1000)
+              }
+            } : month && year ? {
+              date: {
+                gte: new Date(Number(year), Number(month) - 1, 1),
+                lt: new Date(Number(year), Number(month), 1)
+              }
+            } : {})
+          },
+          include: { shift: true }
+        },
         attendances: {
           where: {
             deletedAt: null,
@@ -91,10 +108,15 @@ export const getReportData = async (req: Request, res: Response) => {
         if (!att.clockIn || !att.clockOut) continue;
         totalPresent++;
         
-        const expectedMins = emp.shift ? getShiftMins(emp.shift) : 8 * 60;
+        const attDateStr = new Date(att.date).toISOString().slice(0, 10);
+        const daySchedule = (emp as any).workSchedules?.find(
+          (ws: any) => new Date(ws.date).toISOString().slice(0, 10) === attDateStr
+        );
+        const activeShift = daySchedule?.shift || emp.shift;
+        const expectedMins = activeShift ? getShiftMins(activeShift) : 8 * 60;
 
-        if (emp.shift) {
-          const [sH, sM] = emp.shift.startTime.split(':').map(Number);
+        if (activeShift) {
+          const [sH, sM] = activeShift.startTime.split(':').map(Number);
           const shiftStart = new Date(att.date);
           shiftStart.setHours(sH, sM, 0, 0);
 

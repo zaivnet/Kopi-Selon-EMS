@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import api from '@/lib/api';
 import dayjs from 'dayjs';
 import {
@@ -10,7 +9,6 @@ import {
   Calendar as CalendarIcon,
   FileText,
   CheckCircle2,
-  AlertCircle,
   ChevronLeft,
   ChevronRight,
   User,
@@ -36,10 +34,9 @@ interface EmployeeShiftWorkspaceProps {
 }
 
 export default function EmployeeShiftWorkspace({ user }: EmployeeShiftWorkspaceProps) {
-  const navigate = useNavigate();
   const [employeeData, setEmployeeData] = useState<any>(null);
   const [myAttendances, setMyAttendances] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [_loading, setLoading] = useState(true);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [pendingPeerSwaps, setPendingPeerSwaps] = useState<any[]>([]);
   const [peerToastMessage, setPeerToastMessage] = useState<string | null>(null);

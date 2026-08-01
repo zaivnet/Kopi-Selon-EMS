@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus,
@@ -10,11 +10,7 @@ import {
   AlertTriangle,
   FileText,
   ShieldCheck,
-  CheckCircle2,
   UserX,
-  Sparkles,
-  ChevronRight,
-  Clock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import RosterMatrixBuilder from './RosterMatrixBuilder';

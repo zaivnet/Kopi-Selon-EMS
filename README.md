@@ -50,7 +50,16 @@ Sistem EMS Kopi Selon menggunakan model **Role-Based Access Control (RBAC)** den
 - 💵 **Payroll, Bonus Lembur & Denda**: 
   - Perhitungan slip gaji otomatis berdasarkan denda keterlambatan/absen tanpa izin.
   - Fitur **Pengajuan Lembur (Overtime Request)** terintegrasi dari portal karyawan. Lembur yang disetujui mengurangi denda kurang jam kerja, sekaligus menambahkan **Bonus Lembur per Jam** yang bisa diatur pada aturan gaji (Salary Rules) serta disimulasikan secara real-time.
+  - **Sinkronisasi Matriks Roster (`WorkSchedule`)**: Perhitungan denda keterlambatan dan kurang jam kerja di Payroll & Laporan secara otomatis mendeteksi shift dinamis harian dari `WorkSchedule` sebelum fallback ke shift default.
 - ✏️ **Edit Profil Mandiri Karyawan**: Semua peran (Owner, Staff, Karyawan) dapat memperbarui nama lengkap dan nomor telepon mereka sendiri secara mandiri melalui pop-up Profil Saya di sistem.
+- 🛡️ **Pengerasan Keamanan API & Database Restore**:
+  - Restorasi database SQLite dilindungi oleh validasi 16-byte *magic header* (`SQLite format 3\0`), pemangkasan file non-SQLite, dan batasan ukuran file 100MB.
+  - Penangan token JWT yang aman via `getJwtSecret()` tanpa fallback password hardcoded di produksi.
+  - Perlindungan *rate limiting* (`loginRateLimiter`) pada endpoint login untuk mencegah serangan *Brute-Force*.
+- ⚡ **Optimasi Bundling Vite & Code-Splitting**:
+  - Implementasi *route-based lazy loading* (`React.lazy()` & `Suspense`) dan pemecahan *vendor chunks* (`pdf-excel-vendor`, `chart-vendor`, `map-vendor`, `core-vendor`).
+  - Bundle JavaScript raksasa terpangkas menjadi chunk-chunk kecil modular untuk performa muat awal yang sangat cepat di *smartphone*.
+- 💎 **100% TypeScript Type Safe**: Frontend dan Backend bebas error kompilasi (`npx tsc --noEmit` 0 Error).
 
 ### 🖥️ Persyaratan Minimal Server / Proxmox CT:
 - **CPU**: 1 vCPU

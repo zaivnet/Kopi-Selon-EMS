@@ -1,19 +1,14 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Users,
   CalendarClock,
-  Calendar,
-  CheckCircle2,
   ArrowLeftRight,
   CalendarCheck,
   Plus,
-  Clock,
   Activity,
   ChevronRight,
-  Sparkles,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import RosterMatrixBuilder from './RosterMatrixBuilder';
 
 interface Shift {
@@ -42,7 +37,7 @@ export default function StaffShiftWorkspace({
   onAddShift,
 }: StaffShiftWorkspaceProps) {
   const navigate = useNavigate();
-  const [selectedShiftFilter, setSelectedShiftFilter] = useState<string>('ALL');
+  const [_selectedShiftFilter, _setSelectedShiftFilter] = useState<string>('ALL');
 
   const totalShifts = shifts.length;
   const totalEmployees = employees.length;

@@ -1,4 +1,3 @@
-import React from 'react';
 import { CheckCircle2, Clock, XCircle, AlertCircle, User, Shield, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -15,10 +14,10 @@ export interface TimelineStep {
 
 interface TimelineApprovalProps {
   timelines: TimelineStep[];
-  currentStatus: string;
+  currentStatus?: string;
 }
 
-export default function TimelineApproval({ timelines, currentStatus }: TimelineApprovalProps) {
+export default function TimelineApproval({ timelines }: TimelineApprovalProps) {
   if (!timelines || timelines.length === 0) {
     return (
       <div className="py-6 text-center text-sm text-slate-500 dark:text-slate-400">

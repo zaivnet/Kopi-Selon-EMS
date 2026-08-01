@@ -1,8 +1,8 @@
 import { useState, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { FileText, Download, Printer, FileSpreadsheet, Search } from 'lucide-react';
+import { Download, Printer, FileSpreadsheet } from 'lucide-react';
 import api from '@/lib/api';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
+import { Card, CardContent } from '@/components/ui/Card';
 import * as XLSX from 'xlsx';
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";

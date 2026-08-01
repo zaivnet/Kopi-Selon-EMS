@@ -25,7 +25,7 @@ export default function EmployeeFormModal({ employee, onClose, onSuccess }: { em
     resolver: zodResolver(schema),
   });
 
-  const { user, hasPermission } = useAuth();
+  const { hasPermission } = useAuth();
   const [roles, setRoles] = useState<any[]>([]);
   const STAFF_ASSIGNABLE_ROLES = ['Karyawan'];
   const isStaffLikeRole = !hasPermission('user_management.edit_user') && (hasPermission('employee.edit') || hasPermission('employee.create'));

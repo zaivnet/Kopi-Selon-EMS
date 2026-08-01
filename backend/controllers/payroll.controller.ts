@@ -48,6 +48,16 @@ export const generatePayroll = async (req: Request, res: Response) => {
       },
       include: {
         shift: true,
+        workSchedules: {
+          where: {
+            date: {
+              gte: periodStart,
+              lt: periodEnd
+            },
+            deletedAt: null
+          },
+          include: { shift: true }
+        },
         attendances: {
           where: {
             date: {
@@ -109,11 +119,16 @@ export const generatePayroll = async (req: Request, res: Response) => {
            continue;
         }
 
-        const expectedMins = emp.shift ? getShiftMins(emp.shift) : 8 * 60;
+        const attDateStr = new Date(att.date).toISOString().slice(0, 10);
+        const daySchedule = (emp as any).workSchedules?.find(
+          (ws: any) => new Date(ws.date).toISOString().slice(0, 10) === attDateStr
+        );
+        const activeShift = daySchedule?.shift || emp.shift;
+        const expectedMins = activeShift ? getShiftMins(activeShift) : 8 * 60;
 
-        if (emp.shift) {
-          // Late calc
-          const [sH, sM] = emp.shift.startTime.split(':').map(Number);
+        if (activeShift) {
+          // Late calc based on exact shift for that day
+          const [sH, sM] = activeShift.startTime.split(':').map(Number);
           const shiftStart = new Date(att.date);
           shiftStart.setHours(sH, sM, 0, 0);
 

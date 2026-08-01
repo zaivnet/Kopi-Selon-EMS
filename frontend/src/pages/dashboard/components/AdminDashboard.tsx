@@ -6,7 +6,6 @@ import {
   Activity,
   AlertCircle,
   ArrowRight,
-  CalendarDays,
   CheckCircle2,
   Clock3,
   Coffee,
@@ -14,10 +13,8 @@ import {
   FileText,
   LogIn,
   LogOut,
-  MessageSquareText,
   PlusCircle,
   RefreshCw,
-  Sparkles,
   Users,
   UserPlus,
   Warehouse
@@ -36,7 +33,7 @@ import {
 import api from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
-import { Alert, Badge, Button, EmptyState } from '@/components/ui/design-system';
+import { Badge, Button, EmptyState } from '@/components/ui/design-system';
 
 type DashboardSummary = {
   generatedAt: string;
@@ -98,42 +95,7 @@ const shortDayFormatter = new Intl.DateTimeFormat('id-ID', {
   weekday: 'short'
 });
 
-const formatDuration = (minutes: number) => {
-  const hours = Math.floor(minutes / 60);
-  const remaining = minutes % 60;
-  if (!hours) return `${remaining} menit`;
-  return `${hours}j ${remaining}m`;
-};
 
-const initials = (name: string) =>
-  name
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join('')
-    .toUpperCase();
-
-function Avatar({
-  name,
-  src = null,
-  className = 'h-10 w-10',
-  size
-}: {
-  name: string;
-  src?: string | null;
-  className?: string;
-  size?: string;
-}) {
-  const sizeClasses = size === 'sm' ? 'h-8 w-8 text-[10px]' : size === 'md' ? 'h-10 w-10 text-xs' : className;
-  return src ? (
-    <img src={src} alt={`Foto ${name}`} className={`${sizeClasses} shrink-0 rounded-lg object-cover ring-1 ring-border`} />
-  ) : (
-    <span className={`${sizeClasses} flex shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-xs font-bold text-amber-800 ring-1 ring-amber-500/20 dark:bg-amber-500/20 dark:text-amber-200`}>
-      {initials(name)}
-    </span>
-  );
-}
 
 function DashboardSkeleton() {
   return (

@@ -7,7 +7,6 @@ import { useAuth } from '@/context/AuthContext';
 import { AccountDialogs } from '@/components/account/AccountDialogs';
 
 export default function Navbar({
-  collapsed,
   onMenuClick,
   onSidebarToggle
 }: {

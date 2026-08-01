@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Plus, Download, Upload, Printer, Search, Edit, Trash2, ShieldOff, ShieldCheck, KeyRound, Image as ImageIcon } from 'lucide-react';
 import api from '@/lib/api';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
+import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import EmployeeFormModal from './components/EmployeeFormModal';
 import ResetPasswordModal from './components/ResetPasswordModal';
 import PhotoUploadModal from './components/PhotoUploadModal';
@@ -71,7 +71,7 @@ export default function EmployeeListPage() {
       try {
         // we map Excel columns to our format, but assuming valid data or handling it in backend
         // For now, let us send array to backend or one-by-one
-        for (const row of data) {
+        for (const _row of data) {
            // This is just a basic implementation, we might need a dedicated bulk import endpoint
            
         }

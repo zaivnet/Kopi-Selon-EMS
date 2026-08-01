@@ -14,15 +14,11 @@ import {
   Stethoscope,
   UserCheck,
   XCircle,
-  AlertTriangle,
   FileCheck,
   History,
   Upload,
   Eye,
-  ShieldCheck,
-  ChevronRight,
   Sparkles,
-  Info,
   CalendarCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';

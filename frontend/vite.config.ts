@@ -21,5 +21,31 @@ export default defineConfig({
   },
   optimizeDeps: {
     include: ['react-is', 'recharts']
+  },
+  build: {
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('recharts')) {
+              return 'chart-vendor';
+            }
+            if (id.includes('leaflet')) {
+              return 'map-vendor';
+            }
+            if (id.includes('jspdf') || id.includes('xlsx') || id.includes('file-saver')) {
+              return 'pdf-excel-vendor';
+            }
+            if (id.includes('lucide-react') || id.includes('motion')) {
+              return 'ui-vendor';
+            }
+            if (id.includes('react') || id.includes('react-dom') || id.includes('react-router-dom') || id.includes('@tanstack')) {
+              return 'core-vendor';
+            }
+          }
+        }
+      }
+    }
   }
 });

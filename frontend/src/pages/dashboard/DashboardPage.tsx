@@ -16,12 +16,13 @@ export default function DashboardPage() {
   const isStaff = !isAdmin && !isOwner && (role === 'Staff' || hasPermission('request_center.approve'));
   const isEmployee = !isAdmin && !isOwner && !isStaff;
 
-  const roleConfig = {
+  const roleConfigMap: Record<string, { icon: any; badge: string; desc: string }> = {
     Administrator: { icon: ShieldCheck, badge: 'System Central', desc: 'Kelola absensi, data karyawan, shift, & audit log operasional' },
     Owner: { icon: Store, badge: 'Executive Analytics', desc: 'Insight performa outlet, estimasi payroll, & analisa kedisiplinan' },
     Staff: { icon: Briefcase, badge: 'Store Operations', desc: 'Monitor shift barista, approval tukar shift, & checklist toko' },
     Karyawan: { icon: UserCheck, badge: 'Employee Portal', desc: 'Absensi cepat radius GPS, jadwal shift, & pengajuan cuti' }
-  }[role] || { icon: Coffee, badge: 'Kopi Selon EMS', desc: 'Sistem Manajemen & Absensi Karyawan Kopi Selon' };
+  };
+  const roleConfig = roleConfigMap[role] || { icon: Coffee, badge: 'Kopi Selon EMS', desc: 'Sistem Manajemen & Absensi Karyawan Kopi Selon' };
 
   const RoleIcon = roleConfig.icon;
 

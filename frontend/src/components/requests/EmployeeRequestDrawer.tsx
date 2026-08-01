@@ -7,12 +7,10 @@ import {
   FileText,
   Search,
   X,
-  Clock,
   AlertCircle,
   CheckCircle2,
   Sparkles,
   Upload,
-  Stethoscope,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 

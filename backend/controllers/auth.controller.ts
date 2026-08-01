@@ -3,6 +3,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../lib/prisma.js';
 import { AuthRequest } from '../middleware/auth.middleware.js';
+import { getJwtSecret } from '../lib/jwt.js';
 
 const publicProfileSelect = {
   id: true,
@@ -42,7 +43,7 @@ export const login = async (req: Request, res: Response) => {
     const expiresIn = rememberMe ? '30d' : '1d';
     const token = jwt.sign(
       { id: user.id, role: user.role.name },
-      process.env.JWT_SECRET || 'secret',
+      getJwtSecret(),
       { expiresIn }
     );
 

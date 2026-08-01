@@ -1,17 +1,15 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   BarChart2,
   Users,
   Calendar,
   ShieldAlert,
   Eye,
-  Sparkles,
   PieChart as PieChartIcon,
   TrendingUp,
   Clock,
   CheckCircle2,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
 
 interface Shift {
   id: string;
@@ -27,7 +25,7 @@ interface OwnerShiftWorkspaceProps {
 }
 
 export default function OwnerShiftWorkspace({ shifts = [], employees = [] }: OwnerShiftWorkspaceProps) {
-  const [activeTab, setActiveTab] = useState<'distribution' | 'calendar' | 'stats'>('distribution');
+  const [_activeTab, _setActiveTab] = useState<'distribution' | 'calendar' | 'stats'>('distribution');
 
   // Compute statistics for Executive View
   const totalShifts = shifts.length;
@@ -182,7 +180,7 @@ export default function OwnerShiftWorkspace({ shifts = [], employees = [] }: Own
           </div>
 
           <div className="mt-4 space-y-3">
-            {['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'].map((day, idx) => (
+            {['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'].map((day, _idx) => (
               <div
                 key={day}
                 className="flex items-center justify-between rounded-2xl bg-slate-50/80 p-3 border border-slate-100 dark:bg-slate-950 dark:border-slate-800 text-xs"

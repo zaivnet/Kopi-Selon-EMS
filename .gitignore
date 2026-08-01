@@ -5,3 +5,11 @@ coverage/
 *.log
 .env*
 !.env.example
+database/*.db
+!database/schema.prisma
+!database/seed.ts
+uploads/*
+!uploads/.gitkeep
+backups/*
+!backups/.gitkeep
+dist/
