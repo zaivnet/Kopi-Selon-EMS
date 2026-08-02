@@ -398,3 +398,109 @@ export const uploadPhoto = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ message: 'Internal server error' });
   }
 };
+
+export const importEmployees = async (req: AuthRequest, res: Response) => {
+  try {
+    const { employees } = req.body;
+
+    if (!Array.isArray(employees) || employees.length === 0) {
+      return res.status(400).json({ message: 'Data karyawan kosong atau tidak valid.' });
+    }
+
+    const karyawanRole = await prisma.role.findFirst({
+      where: { name: 'Karyawan', deletedAt: null }
+    });
+
+    if (!karyawanRole) {
+      return res.status(500).json({ message: 'Role Karyawan tidak ditemukan dalam sistem.' });
+    }
+
+    const [allShifts, allOutlets] = await Promise.all([
+      prisma.workShift.findMany({ where: { deletedAt: null } }),
+      prisma.outlet.findMany({ where: { deletedAt: null } })
+    ]);
+
+    const shiftMap = new Map(allShifts.map((s) => [s.name.toLowerCase().trim(), s.id]));
+    const outletMap = new Map(allOutlets.map((o) => [o.name.toLowerCase().trim(), o.id]));
+
+    const results = await prisma.$transaction(async (tx) => {
+      const createdEmployees = [];
+      const skippedUsernames = [];
+
+      for (const empData of employees) {
+        const rawUsername = empData.username?.toString().trim();
+        if (!rawUsername) continue;
+
+        const existingUser = await tx.user.findFirst({
+          where: { username: rawUsername, deletedAt: null }
+        });
+
+        if (existingUser) {
+          skippedUsernames.push(rawUsername);
+          continue;
+        }
+
+        const passwordText = empData.password?.toString() || '123456';
+        const hashedPassword = await bcrypt.hash(passwordText, 10);
+
+        let shiftId = null;
+        if (empData.shiftName) {
+          const cleanShiftName = empData.shiftName.toString().toLowerCase().trim();
+          shiftId = shiftMap.get(cleanShiftName) || null;
+        }
+
+        let outletId = null;
+        if (empData.outletName) {
+          const cleanOutletName = empData.outletName.toString().toLowerCase().trim();
+          outletId = outletMap.get(cleanOutletName) || null;
+        }
+
+        const user = await tx.user.create({
+          data: {
+            username: rawUsername,
+            password: hashedPassword,
+            roleId: karyawanRole.id
+          }
+        });
+
+        let joinDate = null;
+        if (empData.joinDate) {
+          const parsed = new Date(empData.joinDate);
+          if (!isNaN(parsed.getTime())) {
+            joinDate = parsed;
+          }
+        }
+
+        const employee = await tx.employee.create({
+          data: {
+            userId: user.id,
+            firstName: empData.firstName?.toString().trim() || rawUsername,
+            lastName: empData.lastName?.toString().trim() || null,
+            phone: empData.phone?.toString().trim() || null,
+            address: empData.address?.toString().trim() || null,
+            gender: empData.gender?.toString().trim() || null,
+            status: empData.status?.toString().trim() || 'ACTIVE',
+            shiftId,
+            outletId,
+            joinDate,
+            baseSalary: empData.baseSalary ? parseFloat(empData.baseSalary) : null
+          }
+        });
+
+        createdEmployees.push(employee);
+      }
+
+      return { createdCount: createdEmployees.length, skipped: skippedUsernames };
+    });
+
+    res.json({
+      message: `Berhasil mengimpor ${results.createdCount} karyawan.`,
+      createdCount: results.createdCount,
+      skippedCount: results.skipped.length,
+      skippedUsernames: results.skipped
+    });
+  } catch (error: any) {
+    console.error('Import Employees Error:', error);
+    res.status(500).json({ message: error?.message || 'Gagal mengimpor data karyawan.' });
+  }
+};

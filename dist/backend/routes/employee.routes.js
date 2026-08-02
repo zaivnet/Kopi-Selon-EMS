@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
-import { getMyEmployeeProfile, getEmployees, getEmployee, createEmployee, updateEmployee, deleteEmployee, resetPassword, uploadPhoto } from '../controllers/employee.controller.js';
+import { getMyEmployeeProfile, getEmployees, getEmployee, createEmployee, updateEmployee, deleteEmployee, resetPassword, uploadPhoto, importEmployees } from '../controllers/employee.controller.js';
 import { authenticate, authorizePermission } from '../middleware/auth.middleware.js';
 const router = Router();
 // Setup multer for photo uploads
@@ -18,6 +18,7 @@ const upload = multer({ storage: storage });
 router.use(authenticate);
 router.get('/me', getMyEmployeeProfile);
 router.get('/', authorizePermission('employee.view', 'shift.view', 'dashboard.view'), getEmployees);
+router.post('/bulk-import', authorizePermission('employee.create'), importEmployees);
 router.get('/:id', authorizePermission('employee.view'), getEmployee);
 router.post('/', authorizePermission('employee.create'), createEmployee);
 router.put('/:id', authorizePermission('employee.edit'), updateEmployee);

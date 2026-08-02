@@ -71,15 +71,32 @@ export default function EmployeeListPage() {
       const data = XLSX.utils.sheet_to_json(ws);
 
       try {
-        // we map Excel columns to our format, but assuming valid data or handling it in backend
-        // For now, let us send array to backend or one-by-one
-        for (const _row of data) {
-           // This is just a basic implementation, we might need a dedicated bulk import endpoint
-           
+        const employeesToImport = data.map((row: any) => ({
+          firstName: row['Nama Depan'] || row['Nama Karyawan'] || '',
+          lastName: row['Nama Belakang'] || '',
+          phone: row['Telepon'] || row['Nomor HP'] || '',
+          address: row['Alamat'] || '',
+          joinDate: row['Tanggal Bergabung'] || null,
+          gender: row['Gender'] || row['Jenis Kelamin'] || '',
+          baseSalary: row['Gaji Pokok'] || 0,
+          status: row['Status'] || 'ACTIVE',
+          shiftName: row['Shift'] || '',
+          outletName: row['Cabang'] || '',
+          username: row['Username'] || '',
+          password: row['Password'] || '123456'
+        })).filter(emp => emp.username && emp.firstName);
+
+        if (employeesToImport.length === 0) {
+          alert("Tidak ada data karyawan yang valid ditemukan untuk diimpor. Pastikan kolom 'Username' dan nama terisi.");
+          return;
         }
-        alert("Import successful (Simulated)");
-      } catch (error) {
-        alert("Import failed");
+
+        const res = await api.post('/employees/bulk-import', { employees: employeesToImport });
+        alert(res.data?.message || `Berhasil mengimpor ${res.data?.createdCount} karyawan.`);
+        refetch();
+      } catch (error: any) {
+        console.error("Import failed:", error);
+        alert(error.response?.data?.message || "Gagal mengimpor data karyawan.");
       }
     };
     reader.readAsBinaryString(file);

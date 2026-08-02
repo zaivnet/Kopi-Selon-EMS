@@ -9,7 +9,8 @@ import {
   updateEmployee, 
   deleteEmployee, 
   resetPassword,
-  uploadPhoto
+  uploadPhoto,
+  importEmployees
 } from '../controllers/employee.controller.js';
 import { authenticate, authorizePermission } from '../middleware/auth.middleware.js';
 
@@ -31,6 +32,7 @@ router.use(authenticate);
 
 router.get('/me', getMyEmployeeProfile);
 router.get('/', authorizePermission('employee.view', 'shift.view', 'dashboard.view'), getEmployees);
+router.post('/bulk-import', authorizePermission('employee.create'), importEmployees);
 router.get('/:id', authorizePermission('employee.view'), getEmployee);
 router.post('/', authorizePermission('employee.create'), createEmployee);
 router.put('/:id', authorizePermission('employee.edit'), updateEmployee);
