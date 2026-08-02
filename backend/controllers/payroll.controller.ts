@@ -25,16 +25,9 @@ export const generatePayroll = async (req: Request, res: Response) => {
       return end - start;
     };
 
-    // Fetch holidays in the period
+    // Setup period dates
     const periodStart = new Date(periodYear, periodMonth - 1, 1);
     const periodEnd = new Date(periodYear, periodMonth, 1);
-    const holidays = await prisma.holiday.findMany({
-      where: {
-        date: { gte: periodStart, lt: periodEnd },
-        deletedAt: null,
-      },
-    });
-    const holidayCount = holidays.length;
 
     const employees = await prisma.employee.findMany({
       where: {
@@ -189,8 +182,9 @@ export const generatePayroll = async (req: Request, res: Response) => {
       }
       approvedLeaveDays += emp.permissions.length;
 
-      const totalValidDays = attendedDays + approvedLeaveDays + holidayCount;
-      absentDays = Math.max(0, 26 - totalValidDays);
+      const totalDaysInMonth = new Date(periodYear, periodMonth, 0).getDate();
+      const totalValidDays = attendedDays + approvedLeaveDays;
+      absentDays = Math.max(0, totalDaysInMonth - totalValidDays);
       const absentDeduction = absentDays * rule.absentDeduction;
 
       if (lateDeduction > 0) deductions.push({ name: 'Terlambat', amount: lateDeduction });
