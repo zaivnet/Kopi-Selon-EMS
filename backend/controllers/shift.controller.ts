@@ -176,21 +176,31 @@ export const getWorkSchedules = async (req: Request, res: Response) => {
     let startDate: Date;
     let endDate: Date;
 
+    // ── Normalisasi ke WIB (UTC+7) ───────────────────────────────────────────
+    // Selalu gunakan ISO string dengan offset +07:00 agar tidak tergantung
+    // timezone OS/server. new Date('YYYY-MM-DDT00:00:00+07:00') selalu benar.
     if (reqStart && reqEnd && typeof reqStart === 'string' && typeof reqEnd === 'string') {
-      startDate = new Date(reqStart);
-      startDate.setHours(0, 0, 0, 0);
-      endDate = new Date(reqEnd);
-      endDate.setHours(23, 59, 59, 999);
+      startDate = new Date(`${reqStart}T00:00:00+07:00`);
+      endDate   = new Date(`${reqEnd}T23:59:59+07:00`);
     } else if (month && typeof month === 'string' && month.includes('-')) {
       const [y, m] = month.split('-').map(Number);
-      startDate = new Date(y, m - 1, 1, 0, 0, 0);
-      endDate = new Date(y, m, 0, 23, 59, 59);
+      // Bulan pertama
+      const firstDay = new Date(Date.UTC(y, m - 1, 1) - 7 * 60 * 60 * 1000);
+      // Bulan berikutnya hari ke-0 = hari terakhir bulan ini
+      const lastDay  = new Date(Date.UTC(y, m, 0, 23, 59, 59) - 7 * 60 * 60 * 1000 + 59 * 1000);
+      startDate = firstDay;
+      endDate   = lastDay;
     } else {
       const now = new Date();
-      const m = month ? parseInt(month as string, 10) - 1 : now.getMonth();
-      const y = year ? parseInt(year as string, 10) : now.getFullYear();
-      startDate = new Date(y, m, 1, 0, 0, 0);
-      endDate = new Date(y, m + 1, 0, 23, 59, 59);
+      // Ambil tanggal WIB
+      const wibMs  = now.getTime() + 7 * 60 * 60 * 1000;
+      const wibDate = new Date(wibMs);
+      const m  = month ? parseInt(month as string, 10) - 1 : wibDate.getUTCMonth();
+      const y  = year  ? parseInt(year  as string, 10)     : wibDate.getUTCFullYear();
+      startDate = new Date(`${y}-${String(m + 1).padStart(2, '0')}-01T00:00:00+07:00`);
+      // Hari ke-0 bulan berikutnya = hari terakhir bulan ini
+      const lastDayNum = new Date(y, m + 1, 0).getDate();
+      endDate = new Date(`${y}-${String(m + 1).padStart(2, '0')}-${String(lastDayNum).padStart(2, '0')}T23:59:59+07:00`);
     }
 
     const schedules = await prisma.workSchedule.findMany({
@@ -200,6 +210,7 @@ export const getWorkSchedules = async (req: Request, res: Response) => {
       },
       include: {
         shift: true,
+        outlet: true,
         employee: {
           select: { id: true, firstName: true, lastName: true }
         }
@@ -212,6 +223,7 @@ export const getWorkSchedules = async (req: Request, res: Response) => {
     res.status(500).json({ message: 'Internal server error' });
   }
 };
+
 
 export const bulkSaveWorkSchedules = async (req: Request, res: Response) => {
   try {
@@ -234,7 +246,7 @@ export const bulkSaveWorkSchedules = async (req: Request, res: Response) => {
     let minDate: Date | null = null;
     let maxDate: Date | null = null;
 
-    const newEntries: { id: string; employeeId: string; shiftId: string; date: Date }[] = [];
+    const newEntries: { id: string; employeeId: string; shiftId: string; outletId?: string | null; date: Date }[] = [];
 
     for (const item of schedules) {
       if (!item.employeeId || !item.date) continue;
@@ -258,6 +270,7 @@ export const bulkSaveWorkSchedules = async (req: Request, res: Response) => {
             id: crypto.randomUUID(),
             employeeId: item.employeeId,
             shiftId: cleanShiftId,
+            outletId: item.outletId || null,
             date: dayStart
           });
         }
@@ -296,6 +309,23 @@ export const bulkSaveWorkSchedules = async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('bulkSaveWorkSchedules Error:', error);
     res.status(500).json({ message: error?.message || 'Gagal menyimpan roster matriks.' });
+  }
+};
+
+export const clearAllShifts = async (req: Request, res: Response) => {
+  try {
+    const deletedCount = await prisma.workShift.updateMany({
+      where: { deletedAt: null },
+      data: { deletedAt: new Date() }
+    });
+
+    res.json({
+      message: 'Semua data Shift Kerja berhasil dibersihkan.',
+      deletedCount: deletedCount.count
+    });
+  } catch (error: any) {
+    console.error('clearAllShifts Error:', error);
+    res.status(500).json({ message: 'Gagal membersihkan data Shift Kerja.' });
   }
 };
 

@@ -52,6 +52,15 @@ export default function RosterMatrixBuilder({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [selectedWeek, setSelectedWeek] = useState<number>(0);
 
+  // Outlet state
+  const [outlets, setOutlets] = useState<any[]>([]);
+  const [selectedOutletId, setSelectedOutletId] = useState<string>('ALL');
+
+  // Fetch outlets
+  useEffect(() => {
+    api.get('/outlets').then(res => setOutlets(res.data)).catch(() => {});
+  }, []);
+
   // Pattern tool state
   const [selectedEmpForPattern, setSelectedEmpForPattern] = useState<string>('');
   const [patternInput, setPatternInput] = useState<string[]>([]);
@@ -61,9 +70,16 @@ export default function RosterMatrixBuilder({
   const workerEmployees = useMemo(() => {
     return employees.filter((emp) => {
       const roleName = emp.user?.role?.name;
-      return !roleName || roleName === 'Karyawan';
+      const isKaryawan = !roleName || roleName === 'Karyawan';
+      
+      // Filter by outlet if selectedOutletId is not 'ALL'
+      if (selectedOutletId !== 'ALL') {
+        return isKaryawan && (emp as any).outletId === selectedOutletId;
+      }
+      
+      return isKaryawan;
     });
-  }, [employees]);
+  }, [employees, selectedOutletId]);
 
   // Compute days of current month
   const monthDays = useMemo(() => {
@@ -164,24 +180,7 @@ export default function RosterMatrixBuilder({
     showToast('Master shift berhasil diisikan ke sel yang belum terisi.');
   };
 
-  // Tool 2: Set Sundays OFF
-  const handleSetSundaysOff = () => {
-    setGridData((prev) => {
-      const next = { ...prev };
-      workerEmployees.forEach((emp) => {
-        if (!next[emp.id]) next[emp.id] = {};
-        monthDays.forEach((day) => {
-          if (dayjs(day.dateStr).day() === 0) { // Sunday
-            next[emp.id][day.dateStr] = 'OFF';
-          }
-        });
-      });
-      return next;
-    });
-    showToast('Hari Minggu berhasil di-set status LIBUR (OFF).');
-  };
-
-  // Tool 3: Apply rotation pattern to selected employee
+  // Tool 2: Apply rotation pattern to selected employee
   const handleApplyPattern = () => {
     if (!selectedEmpForPattern || patternInput.length === 0) return;
 
@@ -204,14 +203,16 @@ export default function RosterMatrixBuilder({
   const handleSaveRoster = async () => {
     setIsSaving(true);
     try {
-      const schedulesPayload: { employeeId: string; date: string; shiftId: string | null }[] = [];
+      const schedulesPayload: { employeeId: string; date: string; shiftId: string | null; outletId?: string | null }[] = [];
 
       Object.entries(gridData).forEach(([employeeId, dateMap]) => {
+        const emp = workerEmployees.find(e => e.id === employeeId);
         Object.entries(dateMap).forEach(([dateStr, shiftId]) => {
           schedulesPayload.push({
             employeeId,
             date: dateStr,
-            shiftId: shiftId === 'OFF' ? null : shiftId
+            shiftId: shiftId === 'OFF' ? null : shiftId,
+            outletId: selectedOutletId !== 'ALL' ? selectedOutletId : ((emp as any)?.outletId || null)
           });
         });
       });
@@ -310,19 +311,31 @@ export default function RosterMatrixBuilder({
         {/* TOOLBAR BUTTONS */}
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4 dark:border-slate-800">
           <div className="flex flex-wrap items-center gap-2">
+            {outlets.length > 0 && (
+              <select
+                value={selectedOutletId}
+                onChange={(e) => setSelectedOutletId(e.target.value)}
+                className="inline-flex rounded-xl border-2 border-amber-500 bg-white px-3 py-2 text-xs font-bold text-amber-900 transition focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 dark:bg-slate-800 dark:text-amber-300 dark:border-amber-600 appearance-none cursor-pointer hover:bg-amber-50 dark:hover:bg-slate-700"
+                style={{
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23B45309' d='M6 9L1 4h10z'/%3E%3C/svg%3E")`,
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'right 0.5rem center',
+                  paddingRight: '1.75rem'
+                }}
+              >
+                <option value="ALL">Lokasi Shift: Cabang Utama Karyawan</option>
+                {outlets.map((o) => (
+                  <option key={o.id} value={o.id} className="text-slate-900 bg-white">Lokasi Shift: {o.name} ({o.code})</option>
+                ))}
+              </select>
+            )}
+
             <button
               type="button"
               onClick={handleFillDefaultShifts}
               className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
             >
               <UserCheck className="h-3.5 w-3.5 text-emerald-600" /> Isi Master Shift
-            </button>
-            <button
-              type="button"
-              onClick={handleSetSundaysOff}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 transition hover:bg-rose-100 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300"
-            >
-              <Info className="h-3.5 w-3.5" /> Set Minggu OFF
             </button>
             <button
               type="button"
@@ -384,23 +397,23 @@ export default function RosterMatrixBuilder({
           <table className="w-full text-left text-xs border-collapse">
             <thead className="sticky top-0 z-20 bg-slate-100 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800">
               <tr>
-                <th className="sticky left-0 z-30 bg-slate-100 dark:bg-slate-950 p-3.5 font-extrabold text-slate-700 dark:text-slate-200 min-w-[200px] shadow-sm border-r border-slate-200 dark:border-slate-800">
+                <th className="sticky left-0 z-30 bg-slate-100 dark:bg-slate-950 p-2 sm:p-3.5 font-extrabold text-slate-700 dark:text-slate-200 min-w-[100px] sm:min-w-[160px] md:min-w-[200px] shadow-sm border-r border-slate-200 dark:border-slate-800">
                   Nama Karyawan
                 </th>
-                <th className="p-3.5 font-bold text-slate-600 dark:text-slate-400 min-w-[120px] text-center border-r border-slate-200 dark:border-slate-800">
+                <th className="p-2 sm:p-3.5 font-bold text-slate-600 dark:text-slate-400 min-w-[80px] sm:min-w-[120px] text-center border-r border-slate-200 dark:border-slate-800">
                   Master Shift
                 </th>
                 {displayedDays.map((day) => (
                   <th
                     key={day.dateStr}
-                    className={`p-2.5 text-center min-w-[90px] border-r border-slate-200/70 dark:border-slate-800 ${
+                    className={`p-1.5 sm:p-2.5 text-center min-w-[70px] sm:min-w-[90px] border-r border-slate-200/70 dark:border-slate-800 ${
                       day.isWeekend
                         ? 'bg-amber-50/80 text-amber-900 dark:bg-amber-950/40 dark:text-amber-300 font-extrabold'
                         : 'text-slate-700 dark:text-slate-300'
                     }`}
                   >
-                    <div className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500">{day.dayName}</div>
-                    <div className="text-sm font-extrabold">{day.dayNumber}</div>
+                    <div className="text-[8px] sm:text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500">{day.dayName}</div>
+                    <div className="text-xs sm:text-sm font-extrabold">{day.dayNumber}</div>
                   </th>
                 ))}
               </tr>
@@ -418,14 +431,14 @@ export default function RosterMatrixBuilder({
                   return (
                     <tr key={emp.id} className="hover:bg-amber-50/20 dark:hover:bg-slate-800/30 transition-colors">
                       {/* STICKY EMPLOYEE NAME */}
-                      <td className="sticky left-0 z-10 bg-white dark:bg-slate-900 p-3.5 font-bold text-slate-800 dark:text-slate-100 border-r border-slate-200 dark:border-slate-800 shadow-sm">
-                        <div className="truncate font-semibold">{emp.firstName} {emp.lastName || ''}</div>
-                        <div className="text-[10px] font-normal text-slate-400 dark:text-slate-500">{emp.user?.role?.name || 'Karyawan'}</div>
+                      <td className="sticky left-0 z-10 bg-white dark:bg-slate-900 p-2 sm:p-3.5 font-bold text-slate-800 dark:text-slate-100 border-r border-slate-200 dark:border-slate-800 shadow-sm">
+                        <div className="truncate font-semibold text-sm sm:text-base">{emp.firstName} {emp.lastName || ''}</div>
+                        <div className="text-[9px] sm:text-[10px] font-normal text-slate-400 dark:text-slate-500 truncate">{emp.user?.role?.name || 'Karyawan'}</div>
                       </td>
 
                       {/* MASTER SHIFT BADGE */}
-                      <td className="p-3 text-center border-r border-slate-200/70 dark:border-slate-800">
-                        <span className="inline-block rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                      <td className="p-2 sm:p-3 text-center border-r border-slate-200/70 dark:border-slate-800">
+                        <span className="inline-block rounded-lg bg-slate-100 px-1.5 sm:px-2 py-1 text-[9px] sm:text-[10px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300 truncate">
                           {empDefaultShift ? empDefaultShift.name : 'Master Off'}
                         </span>
                       </td>
@@ -438,14 +451,14 @@ export default function RosterMatrixBuilder({
                         return (
                           <td
                             key={day.dateStr}
-                            className={`p-1.5 text-center border-r border-slate-200/70 dark:border-slate-800 ${
+                            className={`p-1 sm:p-1.5 text-center border-r border-slate-200/70 dark:border-slate-800 ${
                               day.isWeekend ? 'bg-amber-50/20 dark:bg-amber-950/10' : ''
                             }`}
                           >
                             <select
                               value={currentVal}
                               onChange={(e) => handleCellChange(emp.id, day.dateStr, e.target.value)}
-                              className={`w-full h-8 rounded-lg border text-[11px] font-bold px-1.5 text-center cursor-pointer transition-all focus:ring-2 focus:ring-amber-500 focus:outline-none ${badgeStyle}`}
+                              className={`w-full h-7 sm:h-8 rounded-lg border text-[10px] sm:text-[11px] font-bold px-1 sm:px-1.5 text-center cursor-pointer transition-all focus:ring-2 focus:ring-amber-500 focus:outline-none ${badgeStyle}`}
                             >
                               <option value="" className="text-slate-800 bg-white dark:bg-slate-900">
                                 {empDefaultShift ? `Default (${empDefaultShift.name.split(' ')[0]})` : 'Tanpa Shift'}
@@ -455,9 +468,6 @@ export default function RosterMatrixBuilder({
                                   {s.name} ({s.startTime}-{s.endTime})
                                 </option>
                               ))}
-                              <option value="OFF" className="text-rose-700 bg-rose-50 dark:bg-slate-900 font-bold">
-                                ⛔ LIBUR (OFF)
-                              </option>
                             </select>
                           </td>
                         );
@@ -527,7 +537,6 @@ export default function RosterMatrixBuilder({
                             {s.name}
                           </option>
                         ))}
-                        <option value="OFF">LIBUR (OFF)</option>
                       </select>
                       <button
                         type="button"
@@ -543,7 +552,7 @@ export default function RosterMatrixBuilder({
                 <div className="mt-3 flex gap-2">
                   <button
                     type="button"
-                    onClick={() => setPatternInput([...patternInput, shifts[0]?.id || 'OFF'])}
+                    onClick={() => setPatternInput([...patternInput, shifts[0]?.id || ''])}
                     className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 dark:border-indigo-900/40 dark:bg-indigo-950/40 dark:text-indigo-300"
                   >
                     + Tambah Hari
@@ -552,12 +561,12 @@ export default function RosterMatrixBuilder({
                     type="button"
                     onClick={() => {
                       if (shifts.length >= 2) {
-                        setPatternInput([shifts[0].id, shifts[0].id, shifts[1].id, shifts[1].id, 'OFF']);
+                        setPatternInput([shifts[0].id, shifts[0].id, shifts[1].id, shifts[1].id]);
                       }
                     }}
                     className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
                   >
-                    Preset Pola Standard (2-2-1)
+                    Preset Pola Standard (2 Pagi, 2 Siang)
                   </button>
                 </div>
               </div>

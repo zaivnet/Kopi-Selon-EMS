@@ -10,9 +10,10 @@ export const getMyEmployeeProfile = async (req, res) => {
             include: {
                 user: { include: { role: true } },
                 shift: true,
+                outlet: true,
                 workSchedules: {
                     where: { deletedAt: null },
-                    include: { shift: true }
+                    include: { shift: true, outlet: true }
                 },
                 leaves: {
                     where: { status: 'APPROVED', deletedAt: null }
@@ -38,6 +39,13 @@ export const getEmployees = async (req, res) => {
         if (hideOwner) {
             excludedRoleNames.push('Owner');
         }
+        // Jadwal hanya dibutuhkan untuk 7 hari ke depan (dashboard: hari ini, besok, lusa + sedikit buffer).
+        // Gunakan WIB offset agar tidak bergantung timezone server.
+        const WIB_MS = 7 * 60 * 60 * 1000;
+        const nowWib = new Date(Date.now() + WIB_MS);
+        const todayWibStr = `${nowWib.getUTCFullYear()}-${String(nowWib.getUTCMonth() + 1).padStart(2, '0')}-${String(nowWib.getUTCDate()).padStart(2, '0')}`;
+        const scheduleStart = new Date(`${todayWibStr}T00:00:00+07:00`);
+        const scheduleEnd = new Date(scheduleStart.getTime() + 7 * 24 * 60 * 60 * 1000);
         const employees = await prisma.employee.findMany({
             include: {
                 user: {
@@ -46,9 +54,11 @@ export const getEmployees = async (req, res) => {
                     }
                 },
                 shift: true,
+                outlet: true,
                 workSchedules: {
-                    where: { deletedAt: null },
-                    include: { shift: true }
+                    // Hanya ambil jadwal 7 hari ke depan — mencegah payload besar dari data historis
+                    where: { deletedAt: null, date: { gte: scheduleStart, lte: scheduleEnd } },
+                    include: { shift: true, outlet: true }
                 },
                 leaves: {
                     where: { status: 'APPROVED', deletedAt: null }
@@ -104,7 +114,7 @@ export const getEmployee = async (req, res) => {
 };
 export const createEmployee = async (req, res) => {
     try {
-        const { name, firstName: reqFirstName, lastName: reqLastName, username, password, roleId, gender, phone, address, status, shiftId, joinDate, baseSalary } = req.body;
+        const { name, firstName: reqFirstName, lastName: reqLastName, username, password, roleId, gender, phone, address, status, shiftId, outletId, joinDate, baseSalary } = req.body;
         // Support single name field "Nama Karyawan" or firstName/lastName
         let firstName = reqFirstName;
         let lastName = reqLastName;
@@ -150,6 +160,7 @@ export const createEmployee = async (req, res) => {
                     address: address || null,
                     status: status || 'ACTIVE',
                     shiftId: shiftId || null,
+                    outletId: outletId || null,
                     joinDate: joinDate ? new Date(joinDate) : null,
                     baseSalary: (parsedSalary !== null && !isNaN(parsedSalary)) ? parsedSalary : null,
                 }
@@ -169,7 +180,7 @@ export const createEmployee = async (req, res) => {
 export const updateEmployee = async (req, res) => {
     try {
         const id = req.params.id;
-        const { name, firstName: reqFirstName, lastName: reqLastName, username: reqUsername, password: reqPassword, gender, phone, address, status, shiftId, joinDate, baseSalary, roleId } = req.body;
+        const { name, firstName: reqFirstName, lastName: reqLastName, username: reqUsername, password: reqPassword, gender, phone, address, status, shiftId, outletId, joinDate, baseSalary, roleId } = req.body;
         const employee = await prisma.employee.findUnique({
             where: { id },
             include: { user: { include: { role: true } } }
@@ -228,6 +239,7 @@ export const updateEmployee = async (req, res) => {
                     address: address !== undefined ? (address || null) : employee.address,
                     status: status || employee.status,
                     shiftId: shiftId !== undefined ? (shiftId || null) : employee.shiftId,
+                    outletId: outletId !== undefined ? (outletId || null) : employee.outletId,
                     joinDate: joinDate ? new Date(joinDate) : employee.joinDate,
                     baseSalary: baseSalary !== undefined
                         ? ((parsedSalary !== null && !isNaN(parsedSalary)) ? parsedSalary : null)

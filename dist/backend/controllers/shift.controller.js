@@ -156,23 +156,33 @@ export const getWorkSchedules = async (req, res) => {
         const { month, year, startDate: reqStart, endDate: reqEnd } = req.query;
         let startDate;
         let endDate;
+        // ── Normalisasi ke WIB (UTC+7) ───────────────────────────────────────────
+        // Selalu gunakan ISO string dengan offset +07:00 agar tidak tergantung
+        // timezone OS/server. new Date('YYYY-MM-DDT00:00:00+07:00') selalu benar.
         if (reqStart && reqEnd && typeof reqStart === 'string' && typeof reqEnd === 'string') {
-            startDate = new Date(reqStart);
-            startDate.setHours(0, 0, 0, 0);
-            endDate = new Date(reqEnd);
-            endDate.setHours(23, 59, 59, 999);
+            startDate = new Date(`${reqStart}T00:00:00+07:00`);
+            endDate = new Date(`${reqEnd}T23:59:59+07:00`);
         }
         else if (month && typeof month === 'string' && month.includes('-')) {
             const [y, m] = month.split('-').map(Number);
-            startDate = new Date(y, m - 1, 1, 0, 0, 0);
-            endDate = new Date(y, m, 0, 23, 59, 59);
+            // Bulan pertama
+            const firstDay = new Date(Date.UTC(y, m - 1, 1) - 7 * 60 * 60 * 1000);
+            // Bulan berikutnya hari ke-0 = hari terakhir bulan ini
+            const lastDay = new Date(Date.UTC(y, m, 0, 23, 59, 59) - 7 * 60 * 60 * 1000 + 59 * 1000);
+            startDate = firstDay;
+            endDate = lastDay;
         }
         else {
             const now = new Date();
-            const m = month ? parseInt(month, 10) - 1 : now.getMonth();
-            const y = year ? parseInt(year, 10) : now.getFullYear();
-            startDate = new Date(y, m, 1, 0, 0, 0);
-            endDate = new Date(y, m + 1, 0, 23, 59, 59);
+            // Ambil tanggal WIB
+            const wibMs = now.getTime() + 7 * 60 * 60 * 1000;
+            const wibDate = new Date(wibMs);
+            const m = month ? parseInt(month, 10) - 1 : wibDate.getUTCMonth();
+            const y = year ? parseInt(year, 10) : wibDate.getUTCFullYear();
+            startDate = new Date(`${y}-${String(m + 1).padStart(2, '0')}-01T00:00:00+07:00`);
+            // Hari ke-0 bulan berikutnya = hari terakhir bulan ini
+            const lastDayNum = new Date(y, m + 1, 0).getDate();
+            endDate = new Date(`${y}-${String(m + 1).padStart(2, '0')}-${String(lastDayNum).padStart(2, '0')}T23:59:59+07:00`);
         }
         const schedules = await prisma.workSchedule.findMany({
             where: {
@@ -181,6 +191,7 @@ export const getWorkSchedules = async (req, res) => {
             },
             include: {
                 shift: true,
+                outlet: true,
                 employee: {
                     select: { id: true, firstName: true, lastName: true }
                 }
@@ -232,6 +243,7 @@ export const bulkSaveWorkSchedules = async (req, res) => {
                         id: crypto.randomUUID(),
                         employeeId: item.employeeId,
                         shiftId: cleanShiftId,
+                        outletId: item.outletId || null,
                         date: dayStart
                     });
                 }
@@ -262,5 +274,21 @@ export const bulkSaveWorkSchedules = async (req, res) => {
     catch (error) {
         console.error('bulkSaveWorkSchedules Error:', error);
         res.status(500).json({ message: error?.message || 'Gagal menyimpan roster matriks.' });
+    }
+};
+export const clearAllShifts = async (req, res) => {
+    try {
+        const deletedCount = await prisma.workShift.updateMany({
+            where: { deletedAt: null },
+            data: { deletedAt: new Date() }
+        });
+        res.json({
+            message: 'Semua data Shift Kerja berhasil dibersihkan.',
+            deletedCount: deletedCount.count
+        });
+    }
+    catch (error) {
+        console.error('clearAllShifts Error:', error);
+        res.status(500).json({ message: 'Gagal membersihkan data Shift Kerja.' });
     }
 };

@@ -219,7 +219,12 @@ export default function OwnerDashboard() {
               summary.todayShifts.slice(0, 5).map((item) => (
                 <div key={item.employeeId} className="flex items-center justify-between rounded-2xl border border-amber-500/15 bg-amber-500/5 p-3.5 dark:border-amber-900/30 dark:bg-amber-950/20">
                   <div>
-                    <p className="text-sm font-bold text-slate-900 dark:text-amber-100">{item.employeeName}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm font-bold text-slate-900 dark:text-amber-100">{item.employeeName}</p>
+                      <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-extrabold text-amber-900 dark:bg-amber-500/30 dark:text-amber-200">
+                        {(item as any).outletCode || (item as any).outlet?.code || 'SELON-1'}
+                      </span>
+                    </div>
                     <p className="text-xs text-slate-500 dark:text-amber-300/70">{item.position || 'Karyawan'} · {item.shift.name} ({item.shift.startTime} - {item.shift.endTime})</p>
                   </div>
                   <Badge variant={item.status === 'WORKING' ? 'success' : item.status === 'COMPLETED' ? 'info' : item.status === 'ABSENT' ? 'danger' : 'neutral'}>

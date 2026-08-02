@@ -21,6 +21,7 @@ import payrollRoutes from "./routes/payroll.routes.js";
 import reportRoutes from "./routes/report.routes.js";
 import dashboardRoutes from "./routes/dashboard.routes.js";
 import requestRoutes from "./routes/request.routes.js";
+import outletRoutes from "./routes/outlet.routes.js";
 import { seedDatabase } from './lib/seed.js';
 import { initAutoBackup } from './lib/auto-backup.js';
 
@@ -63,6 +64,7 @@ app.use("/api/payroll", payrollRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/requests", requestRoutes);
+app.use("/api/outlets", outletRoutes);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

@@ -170,18 +170,38 @@ export async function seedDatabase() {
         });
         console.log('✅ Default Salary Rule created.');
     }
-    // 5. Ensure Default Location Setting exists
-    const locationSettingCount = await prisma.locationSetting.count();
-    if (locationSettingCount === 0) {
-        await prisma.locationSetting.create({
+    // 5. Ensure Default Outlets exist (Selon 1 & Selon 2)
+    const outletCount = await prisma.outlet.count();
+    if (outletCount === 0) {
+        const outlet1 = await prisma.outlet.create({
             data: {
-                name: 'Kantor Utama Kopi Selon',
+                code: 'SELON-1',
+                name: 'Selon 1 - Kantor Utama',
+                address: 'Jl. Kopi Selon No. 1',
+                phone: '08123456789',
                 latitude: -6.200000,
                 longitude: 106.816666,
-                radius: 100
+                radius: 100,
+                isActive: true
             }
         });
-        console.log('✅ Default Location Setting created.');
+        await prisma.outlet.create({
+            data: {
+                code: 'SELON-2',
+                name: 'Selon 2 - Cabang Baru',
+                address: 'Jl. Kopi Selon No. 2',
+                phone: '08123456788',
+                latitude: -6.210000,
+                longitude: 106.826666,
+                radius: 100,
+                isActive: true
+            }
+        });
+        await prisma.employee.updateMany({
+            where: { outletId: null },
+            data: { outletId: outlet1.id }
+        });
+        console.log('✅ Default Outlets created (Selon 1 & Selon 2).');
     }
     console.log('🎉 Database seed completed successfully!');
 }

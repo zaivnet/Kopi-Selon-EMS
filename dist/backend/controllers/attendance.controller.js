@@ -50,7 +50,7 @@ const saveImage = (image) => {
 const findAttendanceEmployee = async (req, res) => {
     const employee = await prisma.employee.findFirst({
         where: { userId: req.user.id, deletedAt: null, status: 'ACTIVE' },
-        include: { shift: true }
+        include: { shift: true, outlet: true }
     });
     if (!employee) {
         res.status(403).json({ message: 'Profil karyawan aktif tidak ditemukan. Hubungi administrator jika Anda seharusnya memiliki akses absensi.' });
@@ -58,16 +58,59 @@ const findAttendanceEmployee = async (req, res) => {
     }
     return employee;
 };
-const checkLocation = async (latitude, longitude) => {
-    const setting = await prisma.locationSetting.findFirst({ where: { deletedAt: null }, orderBy: { updatedAt: 'desc' } });
-    if (!setting)
-        return null;
-    const distance = getDistanceFromLatLonInM(latitude, longitude, Number(setting.latitude), Number(setting.longitude));
+const checkLocationForEmployee = async (employeeId, latitude, longitude) => {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+    // 1. Check if employee has a WorkSchedule with an assigned Outlet for today
+    const todaySchedule = await prisma.workSchedule.findFirst({
+        where: {
+            employeeId,
+            date: { gte: todayStart, lte: todayEnd },
+            deletedAt: null
+        },
+        include: { outlet: true }
+    });
+    let targetOutlet = todaySchedule?.outlet;
+    // 2. If no WorkSchedule outlet, check employee's primary outlet
+    if (!targetOutlet) {
+        const employee = await prisma.employee.findUnique({
+            where: { id: employeeId },
+            include: { outlet: true }
+        });
+        targetOutlet = employee?.outlet || null;
+    }
+    // 3. Fallback to active outlet or LocationSetting
+    if (!targetOutlet) {
+        targetOutlet = await prisma.outlet.findFirst({
+            where: { deletedAt: null, isActive: true },
+            orderBy: { createdAt: 'asc' }
+        });
+    }
+    if (!targetOutlet) {
+        const setting = await prisma.locationSetting.findFirst({ where: { deletedAt: null }, orderBy: { updatedAt: 'desc' } });
+        if (!setting)
+            return null;
+        const distance = getDistanceFromLatLonInM(latitude, longitude, Number(setting.latitude), Number(setting.longitude));
+        return {
+            outlet: null,
+            settingName: setting.name,
+            inRadius: distance <= Number(setting.radius),
+            distanceMeters: Math.round(distance),
+            radiusMeters: Number(setting.radius),
+            latitude: setting.latitude,
+            longitude: setting.longitude
+        };
+    }
+    const distance = getDistanceFromLatLonInM(latitude, longitude, Number(targetOutlet.latitude), Number(targetOutlet.longitude));
     return {
-        setting,
-        inRadius: distance <= Number(setting.radius),
+        outlet: targetOutlet,
+        settingName: targetOutlet.name,
+        inRadius: distance <= Number(targetOutlet.radius),
         distanceMeters: Math.round(distance),
-        radiusMeters: Number(setting.radius)
+        radiusMeters: Number(targetOutlet.radius),
+        latitude: targetOutlet.latitude,
+        longitude: targetOutlet.longitude
     };
 };
 export const getStatus = async (req, res) => {
@@ -84,6 +127,7 @@ export const getStatus = async (req, res) => {
                 clockOut: null,
                 deletedAt: null
             },
+            include: { outlet: true },
             orderBy: { date: 'desc' }
         });
         const todayAttendance = await prisma.attendance.findFirst({
@@ -92,6 +136,7 @@ export const getStatus = async (req, res) => {
                 date: { gte: todayStart, lte: todayEnd },
                 deletedAt: null
             },
+            include: { outlet: true },
             orderBy: { createdAt: 'desc' }
         });
         const todayShiftAssignment = await prisma.workSchedule.findFirst({
@@ -100,34 +145,34 @@ export const getStatus = async (req, res) => {
                 date: { gte: todayStart, lte: todayEnd },
                 deletedAt: null
             },
-            include: { shift: true }
+            include: { shift: true, outlet: true }
         });
         const recentLogs = await prisma.attendance.findMany({
             where: {
                 employeeId: employee.id,
                 deletedAt: null
             },
+            include: { outlet: true },
             orderBy: { date: 'desc' },
             take: 10
         });
-        const location = await prisma.locationSetting.findFirst({
-            where: { deletedAt: null },
-            orderBy: { updatedAt: 'desc' }
-        });
+        const activeOutlet = todayShiftAssignment?.outlet || employee.outlet || await prisma.outlet.findFirst({ where: { deletedAt: null, isActive: true } });
         res.json({
             isCheckedIn: !!activeAttendance,
             attendance: activeAttendance || todayAttendance,
             todayAttendance,
-            shift: todayShiftAssignment?.shift || null,
+            shift: todayShiftAssignment?.shift || employee.shift || null,
+            outlet: activeOutlet || null,
             recentLogs,
             canClockIn: !activeAttendance && !todayAttendance?.clockOut,
             canClockOut: !!activeAttendance,
-            locationConfigured: !!location,
-            location: location ? {
-                name: location.name,
-                latitude: location.latitude,
-                longitude: location.longitude,
-                radiusMeters: location.radius
+            locationConfigured: !!activeOutlet,
+            location: activeOutlet ? {
+                name: activeOutlet.name,
+                code: activeOutlet.code,
+                latitude: activeOutlet.latitude,
+                longitude: activeOutlet.longitude,
+                radiusMeters: activeOutlet.radius
             } : null
         });
     }
@@ -146,6 +191,7 @@ export const getMyAttendances = async (req, res) => {
                 employeeId: employee.id,
                 deletedAt: null
             },
+            include: { outlet: true },
             orderBy: { date: 'desc' },
             take: 50
         });
@@ -166,18 +212,18 @@ export const checkAttendanceLocation = async (req, res) => {
         if (latitude === null || longitude === null) {
             return res.status(400).json({ message: 'Koordinat GPS tidak valid. Muat ulang lokasi lalu coba lagi.' });
         }
-        const result = await checkLocation(latitude, longitude);
+        const result = await checkLocationForEmployee(employee.id, latitude, longitude);
         if (!result) {
-            return res.status(409).json({ message: 'Lokasi absensi belum diatur oleh administrator.', inRadius: false });
+            return res.status(409).json({ message: 'Lokasi cabang absensi belum diatur oleh administrator.', inRadius: false });
         }
         return res.json({
             inRadius: result.inRadius,
             distanceMeters: result.distanceMeters,
             radiusMeters: result.radiusMeters,
-            locationName: result.setting.name,
+            locationName: result.settingName,
             message: result.inRadius
-                ? `Anda berada ${result.distanceMeters} meter dari lokasi kerja.`
-                : `Anda berjarak ${result.distanceMeters} meter dari lokasi kerja, di luar radius ${result.radiusMeters} meter.`
+                ? `Anda berada ${result.distanceMeters} meter dari lokasi ${result.settingName}.`
+                : `Anda berjarak ${result.distanceMeters} meter dari ${result.settingName}, di luar radius ${result.radiusMeters} meter.`
         });
     }
     catch (error) {
@@ -204,13 +250,13 @@ export const submitAttendance = async (req, res) => {
         if (!parsedPhoto) {
             return res.status(400).json({ message: 'Foto selfie harus berupa JPEG/PNG yang valid dan maksimal 5 MB.' });
         }
-        const location = await checkLocation(parsedLatitude, parsedLongitude);
+        const location = await checkLocationForEmployee(employee.id, parsedLatitude, parsedLongitude);
         if (!location) {
-            return res.status(409).json({ message: 'Lokasi absensi belum diatur oleh administrator.' });
+            return res.status(409).json({ message: 'Lokasi outlet absensi belum diatur oleh administrator.' });
         }
         if (!location.inRadius) {
             return res.status(403).json({
-                message: `Absensi ditolak. Anda berjarak ${location.distanceMeters} meter dari lokasi kerja, di luar radius yang diizinkan ${location.radiusMeters} meter.`,
+                message: `Absensi ditolak. Anda berjarak ${location.distanceMeters} meter dari lokasi cabang ${location.settingName}, di luar radius ${location.radiusMeters} meter.`,
                 code: 'OUTSIDE_ATTENDANCE_RADIUS',
                 distanceMeters: location.distanceMeters,
                 radiusMeters: location.radiusMeters,
@@ -261,6 +307,7 @@ export const submitAttendance = async (req, res) => {
             attendance = await prisma.attendance.create({
                 data: {
                     employeeId: employee.id,
+                    outletId: location.outlet?.id || null,
                     date: now,
                     clockIn: now,
                     status: attendanceStatus,
@@ -276,7 +323,7 @@ export const submitAttendance = async (req, res) => {
                         }
                     }
                 },
-                include: { employee: true, photos: true }
+                include: { employee: true, outlet: true, photos: true }
             });
         }
         else {
@@ -296,132 +343,125 @@ export const submitAttendance = async (req, res) => {
                         }
                     }
                 },
-                include: { employee: true, photos: true }
+                include: { employee: true, outlet: true, photos: true }
             });
         }
-        writtenPhotoPath = null;
         const io = req.app.get('io');
         if (io) {
-            io.emit('attendance_update', attendance);
+            io.emit('attendance_update', {
+                id: attendance.id,
+                employeeId: attendance.employeeId,
+                employeeName: `${employee.firstName} ${employee.lastName || ''}`.trim(),
+                type,
+                status: attendance.status,
+                clockIn: attendance.clockIn,
+                clockOut: attendance.clockOut,
+                outletName: location.settingName,
+                photoUrl: savedPhoto.url,
+                timestamp: new Date().toISOString()
+            });
         }
         res.json({
-            message: type === 'CHECK_IN' ? 'Check-in berhasil. Selamat bekerja!' : 'Check-out berhasil. Terima kasih atas kerja hari ini!',
+            message: type === 'CHECK_IN' ? 'Check-in berhasil.' : 'Check-out berhasil.',
             attendance,
-            distanceMeters: location.distanceMeters,
-            radiusMeters: location.radiusMeters
+            photoUrl: savedPhoto.url,
+            locationName: location.settingName
         });
     }
     catch (error) {
-        console.error(error);
-        if (writtenPhotoPath) {
+        if (writtenPhotoPath && fs.existsSync(writtenPhotoPath)) {
             try {
                 fs.unlinkSync(writtenPhotoPath);
             }
-            catch (cleanupError) {
-                console.error('Gagal membersihkan foto absensi:', cleanupError);
+            catch (e) {
+                console.error('Gagal menghapus file foto temp setelah error:', e);
             }
         }
-        res.status(500).json({ message: 'Absensi gagal disimpan. Silakan coba lagi.' });
+        console.error(error);
+        res.status(500).json({ message: 'Gagal memproses absensi.' });
     }
 };
 export const getMonitoring = async (req, res) => {
     try {
-        const startOfDay = new Date();
-        startOfDay.setHours(0, 0, 0, 0);
-        const yesterday = new Date(startOfDay);
-        yesterday.setDate(yesterday.getDate() - 1);
-        const now = new Date();
-        const employees = await prisma.employee.findMany({
-            where: {
+        const { date, search, outletId } = req.query;
+        let targetDate = new Date();
+        if (date && typeof date === 'string') {
+            targetDate = new Date(date);
+        }
+        const startOfDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 0, 0, 0);
+        const endOfDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 23, 59, 59);
+        const whereClause = {
+            deletedAt: null,
+            user: {
                 deletedAt: null,
-                user: {
-                    deletedAt: null,
-                    role: { name: { notIn: HIDDEN_ROLES } }
+                role: {
+                    name: { notIn: [...HIDDEN_ROLES] }
                 }
-            },
+            }
+        };
+        if (outletId && typeof outletId === 'string' && outletId !== 'ALL') {
+            whereClause.outletId = outletId;
+        }
+        if (search && typeof search === 'string' && search.trim()) {
+            const q = search.trim();
+            whereClause.OR = [
+                { firstName: { contains: q } },
+                { lastName: { contains: q } },
+                { user: { username: { contains: q } } }
+            ];
+        }
+        const employees = await prisma.employee.findMany({
+            where: whereClause,
             include: {
+                user: { select: { username: true, role: { select: { name: true } } } },
                 shift: true,
-                user: { select: { role: true } },
-                attendances: {
+                outlet: true,
+                workSchedules: {
                     where: {
-                        date: { gte: yesterday },
+                        date: { gte: startOfDay, lte: endOfDay },
                         deletedAt: null
                     },
-                    include: {
-                        photos: true
-                    }
+                    include: { shift: true, outlet: true }
+                },
+                attendances: {
+                    where: {
+                        date: { gte: startOfDay, lte: endOfDay },
+                        deletedAt: null
+                    },
+                    include: { photos: true, outlet: true },
+                    orderBy: { createdAt: 'desc' }
                 }
-            }
+            },
+            orderBy: { firstName: 'asc' }
         });
-        const monitoringData = employees.map((emp) => {
-            // Find the most relevant attendance (latest one that is active, or today's)
-            const activeOrToday = emp.attendances.sort((a, b) => b.date.getTime() - a.date.getTime()).find((a) => !a.clockOut || a.date >= startOfDay);
-            const attendance = activeOrToday || emp.attendances.sort((a, b) => b.date.getTime() - a.date.getTime())[0];
-            let status = 'Belum Masuk';
-            let statusColor = 'bg-gray-500';
+        const monitoringData = employees.map(emp => {
+            const schedule = emp.workSchedules[0];
+            const attendance = emp.attendances[0];
+            const activeShift = schedule?.shift || emp.shift;
+            const activeOutlet = schedule?.outlet || emp.outlet;
+            let status = 'ABSENT';
             if (attendance) {
-                if (attendance.clockOut) {
-                    status = 'Sudah Pulang';
-                    statusColor = 'bg-blue-500';
-                }
-                else {
-                    status = 'Sedang Bekerja';
-                    statusColor = 'bg-emerald-500';
-                }
-            }
-            else {
-                if (emp.shift) {
-                    const [startHour, startMin] = emp.shift.startTime.split(':').map(Number);
-                    const [endHour, endMin] = emp.shift.endTime.split(':').map(Number);
-                    let shiftStart = new Date();
-                    shiftStart.setHours(startHour, startMin, 0, 0);
-                    let shiftEnd = new Date();
-                    shiftEnd.setHours(endHour, endMin, 0, 0);
-                    // Handle overnight shifts
-                    if (shiftEnd < shiftStart) {
-                        if (now.getHours() < endHour) {
-                            shiftStart.setDate(shiftStart.getDate() - 1);
-                        }
-                        else {
-                            shiftEnd.setDate(shiftEnd.getDate() + 1);
-                        }
-                    }
-                    if (now > shiftEnd) {
-                        status = 'Tidak Hadir';
-                        statusColor = 'bg-red-500';
-                    }
-                    else if (now > shiftStart) {
-                        status = 'Terlambat';
-                        statusColor = 'bg-amber-500';
-                    }
-                    else {
-                        status = 'Belum Masuk';
-                        statusColor = 'bg-gray-500';
-                    }
-                }
-                else {
-                    status = 'Belum Masuk';
-                    statusColor = 'bg-gray-500';
-                }
+                status = attendance.status;
             }
             return {
-                employee: {
-                    id: emp.id,
-                    firstName: emp.firstName,
-                    lastName: emp.lastName,
-                    position: emp.position || emp.user?.role?.name || 'Karyawan',
-                    roleName: emp.user?.role?.name || 'Karyawan',
-                },
-                shift: emp.shift,
-                attendance: attendance || null,
+                employeeId: emp.id,
+                employeeName: `${emp.firstName} ${emp.lastName || ''}`.trim(),
+                username: emp.user.username,
+                roleName: emp.user.role.name,
+                shift: activeShift ? `${activeShift.name} (${activeShift.startTime} - ${activeShift.endTime})` : 'Belum diatur',
+                outlet: activeOutlet ? activeOutlet.name : 'Utama',
+                outletCode: activeOutlet?.code || 'SELON-1',
+                attendanceId: attendance?.id || null,
+                clockIn: attendance?.clockIn || null,
+                clockOut: attendance?.clockOut || null,
                 status,
-                statusColor
+                photos: attendance?.photos || []
             };
         });
         res.json(monitoringData);
     }
     catch (error) {
-        console.error(error);
-        res.status(500).json({ message: 'Internal server error' });
+        console.error('getMonitoring error:', error);
+        res.status(500).json({ message: 'Gagal memuat monitoring absensi.' });
     }
 };

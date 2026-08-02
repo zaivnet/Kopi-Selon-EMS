@@ -20,6 +20,7 @@ import {
   Eye,
   Sparkles,
   CalendarCheck,
+  Store,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import TimelineApproval from '@/components/requests/TimelineApproval';
@@ -73,12 +74,14 @@ export default function RequestCenterPage() {
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [shifts, setShifts] = useState<Shift[]>([]);
+  const [outlets, setOutlets] = useState<Array<{ id: string; code: string; name: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   // Filters & Search
   const [selectedType, setSelectedType] = useState<string>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
+  const [selectedOutlet, setSelectedOutlet] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Modals state
@@ -133,12 +136,14 @@ export default function RequestCenterPage() {
 
   const fetchDependencies = async () => {
     try {
-      const [empRes, shiftRes] = await Promise.all([
+      const [empRes, shiftRes, outletRes] = await Promise.all([
         axios.get('/api/employees', getAuthHeaders()),
         axios.get('/api/shifts', getAuthHeaders()),
+        axios.get('/api/outlets', getAuthHeaders()).catch(() => ({ data: [] })),
       ]);
       setEmployees(empRes.data.filter((e: any) => e.status === 'ACTIVE'));
       setShifts(shiftRes.data);
+      setOutlets(Array.isArray(outletRes.data) ? outletRes.data : []);
     } catch (err) {
       console.error('Error fetching dependencies:', err);
     }
@@ -148,6 +153,53 @@ export default function RequestCenterPage() {
     fetchRequests();
     fetchDependencies();
   }, [selectedType, selectedStatus]);
+
+  const filteredRequests = (requests || []).filter((r: any) => {
+    if (selectedOutlet === 'ALL') return true;
+    const empOutletId = r.employee?.outletId || r.employee?.outlet?.id;
+    const empOutletCode = r.employee?.outlet?.code;
+    return (
+      empOutletId === selectedOutlet ||
+      (empOutletCode && empOutletCode.toUpperCase() === selectedOutlet.toUpperCase())
+    );
+  });
+
+  // ── Shift Preview State ─────────────────────────────────────────
+  const [shiftPreview, setShiftPreview] = React.useState<{
+    myShift: { name: string; startTime: string; endTime: string; source: string } | null;
+    targetShift: { name: string; startTime: string; endTime: string; source: string } | null;
+  } | null>(null);
+  const [loadingPreview, setLoadingPreview] = React.useState(false);
+
+  // Auto-fetch shift preview whenever date or targetEmployee changes on SWAP/CHANGE modal
+  React.useEffect(() => {
+    if (!showCreateModal) return;
+    if (!formStartDate) { setShiftPreview(null); return; }
+    if (formType !== 'SWAP_SHIFT' && formType !== 'CHANGE_SHIFT') { setShiftPreview(null); return; }
+
+    let cancelled = false;
+    const fetchPreview = async () => {
+      try {
+        setLoadingPreview(true);
+        const params: any = { date: formStartDate };
+        if (formType === 'SWAP_SHIFT' && formTargetEmployeeId) {
+          params.targetEmployeeId = formTargetEmployeeId;
+        }
+        const res = await axios.get('/api/requests/shift-preview', {
+          ...getAuthHeaders(),
+          params,
+        });
+        if (!cancelled) setShiftPreview(res.data);
+      } catch {
+        if (!cancelled) setShiftPreview(null);
+      } finally {
+        if (!cancelled) setLoadingPreview(false);
+      }
+    };
+
+    fetchPreview();
+    return () => { cancelled = true; };
+  }, [formStartDate, formTargetEmployeeId, formType, showCreateModal]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -190,6 +242,11 @@ export default function RequestCenterPage() {
 
     if (formType === 'CHANGE_SHIFT' && !formTargetShiftId) {
       alert('Pilih shift tujuan untuk Ubah Shift.');
+      return;
+    }
+
+    if (formEndDate && new Date(formEndDate) < new Date(formStartDate)) {
+      alert('Tanggal selesai tidak boleh lebih awal dari tanggal mulai.');
       return;
     }
 
@@ -532,6 +589,23 @@ export default function RequestCenterPage() {
             </select>
           </div>
 
+          {/* Outlet / Cabang Filter */}
+          <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-1.5 dark:border-slate-800 dark:bg-slate-900">
+            <Store className="h-3.5 w-3.5 text-slate-400" />
+            <select
+              value={selectedOutlet}
+              onChange={(e) => setSelectedOutlet(e.target.value)}
+              className="bg-transparent text-xs font-medium outline-none text-slate-700 dark:text-slate-200"
+            >
+              <option value="ALL">Semua Cabang</option>
+              {outlets.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name || o.code}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <button
             type="button"
             onClick={fetchRequests}
@@ -551,7 +625,7 @@ export default function RequestCenterPage() {
             <RefreshCw className="h-5 w-5 animate-spin text-[#6F4E37]" /> Memuat daftar permintaan...
           </div>
         </div>
-      ) : requests.length === 0 ? (
+      ) : filteredRequests.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-slate-300 bg-white/40 py-16 text-center dark:border-slate-800 dark:bg-slate-900/20">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-[#6F4E37] dark:bg-slate-800 dark:text-amber-300">
             <FileText className="h-6 w-6" />
@@ -578,7 +652,7 @@ export default function RequestCenterPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200/70 dark:divide-slate-800/70">
-                {requests.map((item) => {
+                {filteredRequests.map((item) => {
                   const reqEmpName = `${item.employee?.firstName || ''} ${item.employee?.lastName || ''}`.trim();
                   const targetEmpName = item.targetEmployee
                     ? `${item.targetEmployee.firstName} ${item.targetEmployee.lastName || ''}`.trim()
@@ -608,7 +682,12 @@ export default function RequestCenterPage() {
                             {item.employee?.firstName?.[0]?.toUpperCase() || 'E'}
                           </div>
                           <div>
-                            <p className="font-semibold text-slate-800 dark:text-slate-100">{reqEmpName}</p>
+                            <div className="flex items-center gap-1.5">
+                              <p className="font-semibold text-slate-800 dark:text-slate-100">{reqEmpName}</p>
+                              <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-extrabold text-amber-900 dark:bg-amber-500/30 dark:text-amber-200">
+                                {(item.employee as any)?.outlet?.code || 'SELON-1'}
+                              </span>
+                            </div>
                             <p className="text-xs text-slate-500">
                               {item.employee?.shift?.name ? `Shift: ${item.employee.shift.name}` : 'Tanpa Shift'}
                             </p>
@@ -820,6 +899,7 @@ export default function RequestCenterPage() {
                   <input
                     type="date"
                     value={formStartDate}
+                    min={(formType === 'SICK_LEAVE') ? (() => { const d = new Date(); d.setDate(d.getDate() - 7); return d.toISOString().slice(0,10); })() : new Date().toISOString().slice(0, 10)}
                     onChange={(e) => setFormStartDate(e.target.value)}
                     className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-2.5 text-sm outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
                   />
@@ -833,6 +913,7 @@ export default function RequestCenterPage() {
                     <input
                       type="date"
                       value={formEndDate}
+                      min={formStartDate || new Date().toISOString().slice(0, 10)}
                       onChange={(e) => setFormEndDate(e.target.value)}
                       className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-2.5 text-sm outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
                     />
@@ -866,6 +947,56 @@ export default function RequestCenterPage() {
                   </div>
                 </div>
               )}
+
+              {/* ── Preview Shift Otomatis ─────────────────────── */}
+              {(formType === 'SWAP_SHIFT' || formType === 'CHANGE_SHIFT') && formStartDate && (
+                <div className="rounded-2xl border border-amber-200/80 bg-amber-50/60 p-3 dark:border-amber-800/40 dark:bg-amber-950/20">
+                  <p className="mb-2 text-xs font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                    <CalendarCheck className="h-3.5 w-3.5" />
+                    Preview Jadwal Shift — {new Date(formStartDate + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                  </p>
+                  {loadingPreview ? (
+                    <p className="text-xs text-slate-500 animate-pulse">Memuat preview jadwal...</p>
+                  ) : shiftPreview ? (
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="rounded-xl bg-white/80 px-3 py-2 shadow-sm dark:bg-slate-900/60">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Shift Saya</p>
+                        {shiftPreview.myShift ? (
+                          <>
+                            <p className="mt-0.5 text-sm font-bold text-slate-800 dark:text-slate-100">{shiftPreview.myShift.name}</p>
+                            <p className="text-xs text-slate-500">{shiftPreview.myShift.startTime} – {shiftPreview.myShift.endTime}</p>
+                            {shiftPreview.myShift.source === 'schedule' && (
+                              <span className="text-[9px] text-amber-600 dark:text-amber-400 font-semibold">★ Jadwal Khusus</span>
+                            )}
+                          </>
+                        ) : (
+                          <p className="mt-0.5 text-xs text-slate-400 italic">Tidak ada shift</p>
+                        )}
+                      </div>
+                      {formType === 'SWAP_SHIFT' && formTargetEmployeeId && (
+                        <div className="rounded-xl bg-white/80 px-3 py-2 shadow-sm dark:bg-slate-900/60">
+                          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Shift Rekan</p>
+                          {shiftPreview.targetShift ? (
+                            <>
+                              <p className="mt-0.5 text-sm font-bold text-slate-800 dark:text-slate-100">{shiftPreview.targetShift.name}</p>
+                              <p className="text-xs text-slate-500">{shiftPreview.targetShift.startTime} – {shiftPreview.targetShift.endTime}</p>
+                              {shiftPreview.targetShift.source === 'schedule' && (
+                                <span className="text-[9px] text-amber-600 dark:text-amber-400 font-semibold">★ Jadwal Khusus</span>
+                              )}
+                            </>
+                          ) : (
+                            <p className="mt-0.5 text-xs text-slate-400 italic">Pilih rekan untuk melihat shift</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-400 italic">Pilih tanggal untuk melihat preview shift.</p>
+                  )}
+                </div>
+              )}
+
+
 
               {/* Swap Peer Selection */}
               {formType === 'SWAP_SHIFT' && (

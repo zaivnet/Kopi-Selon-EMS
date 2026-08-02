@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Plus, Download, Upload, Printer, Search, Edit, Trash2, ShieldOff, ShieldCheck, KeyRound, Image as ImageIcon } from 'lucide-react';
+import { Plus, Download, Upload, Printer, Search, Edit, Trash2, ShieldOff, ShieldCheck, KeyRound, Image as ImageIcon, Trash } from 'lucide-react';
 import api from '@/lib/api';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
 import EmployeeFormModal from './components/EmployeeFormModal';
@@ -16,6 +16,8 @@ export default function EmployeeListPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<any>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
   
   const [isResetPasswordOpen, setIsResetPasswordOpen] = useState(false);
   const [isPhotoOpen, setIsPhotoOpen] = useState(false);
@@ -106,6 +108,45 @@ export default function EmployeeListPage() {
     }
   };
 
+  const handleSelectEmployee = (employeeId: string) => {
+    const newSelectedIds = new Set(selectedIds);
+    if (newSelectedIds.has(employeeId)) {
+      newSelectedIds.delete(employeeId);
+    } else {
+      newSelectedIds.add(employeeId);
+    }
+    setSelectedIds(newSelectedIds);
+  };
+
+  const handleSelectAll = () => {
+    if (selectedIds.size === filteredEmployees.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredEmployees.map((emp: any) => emp.id)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    
+    if (confirm(`Apakah Anda yakin ingin menghapus ${selectedIds.size} karyawan yang dipilih? Data akan dihapus secara soft-delete.`)) {
+      setIsDeleting(true);
+      try {
+        const deletePromises = Array.from(selectedIds).map(id =>
+          api.delete(`/employees/${id}`)
+        );
+        await Promise.all(deletePromises);
+        setSelectedIds(new Set());
+        refetch();
+        alert(`${selectedIds.size} karyawan berhasil dihapus.`);
+      } catch (err) {
+        alert('Gagal menghapus beberapa atau semua karyawan');
+      } finally {
+        setIsDeleting(false);
+      }
+    }
+  };
+
   const handlePrint = () => {
     window.print();
   };
@@ -119,6 +160,16 @@ export default function EmployeeListPage() {
         </div>
         
         <div className="flex flex-wrap items-center gap-2 print:hidden">
+          {selectedIds.size > 0 && hasPermission('employee.delete') && (
+            <button 
+              onClick={handleBulkDelete}
+              disabled={isDeleting}
+              className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-destructive text-destructive-foreground shadow hover:bg-destructive/90 h-9 px-4 py-2"
+            >
+              <Trash className="mr-2 h-4 w-4" /> 
+              Hapus {selectedIds.size} Karyawan
+            </button>
+          )}
           {hasPermission('employee.create') && (
             <button onClick={() => { setSelectedEmployee(null); setIsFormOpen(true); }} className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground shadow hover:bg-primary/90 h-9 px-4 py-2">
               <Plus className="mr-2 h-4 w-4" /> Tambah Karyawan
@@ -165,9 +216,19 @@ export default function EmployeeListPage() {
             <table className="w-full text-sm">
               <thead className="border-b bg-muted/50">
                 <tr className="text-left font-medium text-muted-foreground">
+                  <th className="h-10 px-4 align-middle w-12">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.size > 0 && selectedIds.size === filteredEmployees.length}
+                      indeterminate={selectedIds.size > 0 && selectedIds.size < filteredEmployees.length}
+                      onChange={handleSelectAll}
+                      className="rounded border-gray-300"
+                    />
+                  </th>
                   <th className="h-10 px-4 align-middle">Profil</th>
                   <th className="h-10 px-4 align-middle">Nama Karyawan</th>
                   <th className="h-10 px-4 align-middle">Role</th>
+                  <th className="h-10 px-4 align-middle">Cabang (Outlet)</th>
                   <th className="h-10 px-4 align-middle">Jenis Kelamin</th>
                   <th className="h-10 px-4 align-middle">Status</th>
                   <th className="h-10 px-4 align-middle text-right print:hidden">Aksi</th>
@@ -175,12 +236,20 @@ export default function EmployeeListPage() {
               </thead>
               <tbody>
                 {isLoading ? (
-                  <tr><td colSpan={6} className="p-4 text-center">Loading...</td></tr>
+                  <tr><td colSpan={8} className="p-4 text-center">Loading...</td></tr>
                 ) : filteredEmployees.length === 0 ? (
-                  <tr><td colSpan={6} className="p-4 text-center">Data tidak ditemukan</td></tr>
+                  <tr><td colSpan={8} className="p-4 text-center">Data tidak ditemukan</td></tr>
                 ) : (
                   filteredEmployees.map((emp: any) => (
                     <tr key={emp.id} className="border-b transition-colors hover:bg-muted/50">
+                      <td className="p-4 align-middle w-12">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(emp.id)}
+                          onChange={() => handleSelectEmployee(emp.id)}
+                          className="rounded border-gray-300"
+                        />
+                      </td>
                       <td className="p-4 align-middle">
                         <div className="h-10 w-10 rounded-full bg-secondary flex items-center justify-center overflow-hidden">
                           {emp.photoUrl ? (
@@ -198,6 +267,11 @@ export default function EmployeeListPage() {
                         <div className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold">
                           {emp.user?.role?.name === 'Administrator' ? 'Admin' : (emp.user?.role?.name || '-')}
                         </div>
+                      </td>
+                      <td className="p-4 align-middle">
+                        <span className="inline-flex items-center rounded-md bg-amber-500/10 px-2.5 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-300">
+                          {emp.outlet?.name || 'Selon 1'}
+                        </span>
                       </td>
                       <td className="p-4 align-middle">
                         {emp.gender === 'L' ? 'Laki-laki' : emp.gender === 'P' ? 'Perempuan' : '-'}

@@ -69,10 +69,12 @@ export const getDashboardSummary = async (_req: AuthRequest, res: Response) => {
         lastName: true,
         photoUrl: true,
         shift: { select: { id: true, name: true, startTime: true, endTime: true } },
+        outlet: { select: { id: true, code: true, name: true } },
         workSchedules: {
           where: { deletedAt: null, date: { gte: todayStart, lt: tomorrowStart } },
           select: {
-            shift: { select: { id: true, name: true, startTime: true, endTime: true } }
+            shift: { select: { id: true, name: true, startTime: true, endTime: true } },
+            outlet: { select: { id: true, code: true, name: true } }
           },
           take: 1
         }
@@ -212,10 +214,13 @@ export const getDashboardSummary = async (_req: AuthRequest, res: Response) => {
         if (active) status = 'WORKING';
         else if (completed) status = 'COMPLETED';
         else if (now > bounds.end) status = 'ABSENT';
+        const activeOutlet = employee.workSchedules[0]?.outlet || employee.outlet;
         return {
           employeeId: employee.id,
           employeeName: fullName(employee),
           employeePhotoUrl: employee.photoUrl,
+          outletCode: activeOutlet?.code || 'SELON-1',
+          outletName: activeOutlet?.name || 'Selon 1',
           shift: { name: shift.name, startTime: shift.startTime, endTime: shift.endTime },
           status
         };

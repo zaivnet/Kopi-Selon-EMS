@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getShifts, createShift, updateShift, deleteShift, assignShift, getWorkSchedules, bulkSaveWorkSchedules } from '../controllers/shift.controller.js';
+import { getShifts, createShift, updateShift, deleteShift, assignShift, getWorkSchedules, bulkSaveWorkSchedules, clearAllShifts } from '../controllers/shift.controller.js';
 import { authenticate, authorizePermission } from '../middleware/auth.middleware.js';
 const router = Router();
 router.use(authenticate);
@@ -8,6 +8,7 @@ router.get('/schedules', authorizePermission('shift.view', 'dashboard.view'), ge
 router.post('/schedules/bulk', authorizePermission('shift.edit', 'shift.create'), bulkSaveWorkSchedules);
 router.post('/', authorizePermission('shift.create'), createShift);
 router.post('/assign', authorizePermission('shift.edit'), assignShift);
+router.delete('/clear-all', authorizePermission('shift.delete'), clearAllShifts);
 router.put('/:id', authorizePermission('shift.edit'), updateShift);
 router.delete('/:id', authorizePermission('shift.delete'), deleteShift);
 export default router;

@@ -1,6 +1,7 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../lib/prisma.js';
+import { getJwtSecret } from '../lib/jwt.js';
 const publicProfileSelect = {
     id: true,
     username: true,
@@ -31,7 +32,7 @@ export const login = async (req, res) => {
             return res.status(401).json({ message: 'Invalid username or password' });
         }
         const expiresIn = rememberMe ? '30d' : '1d';
-        const token = jwt.sign({ id: user.id, role: user.role.name }, process.env.JWT_SECRET || 'secret', { expiresIn });
+        const token = jwt.sign({ id: user.id, role: user.role.name }, getJwtSecret(), { expiresIn });
         res.json({
             token,
             user: {

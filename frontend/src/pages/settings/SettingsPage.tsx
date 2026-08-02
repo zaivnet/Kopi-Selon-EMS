@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   MapPin, Settings as SettingsIcon, Database, Moon, Sun, 
   History, Save, HardDriveDownload, HardDriveUpload, Clock, Calculator,
-  Crosshair, LoaderCircle
+  Crosshair, LoaderCircle, Store, Info
 } from 'lucide-react';
 import api from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -13,6 +13,7 @@ import { MapContainer, TileLayer, Marker, Circle, useMap, useMapEvents } from 'r
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import dayjs from 'dayjs';
+import OutletManagementTab from './components/OutletManagementTab';
 
 // Fix leaflet icon issue
 import iconUrl from 'leaflet/dist/images/marker-icon.png';
@@ -30,7 +31,7 @@ export default function SettingsPage() {
   const canEditSettings = hasPermission('settings.edit');
   const canViewAuditLog = hasPermission('audit_log.view');
   const canUseBackup = hasPermission('backup_restore.backup');
-  const [activeTab, setActiveTab] = useState(canEditSettings ? 'location' : 'appearance');
+  const [activeTab, setActiveTab] = useState(canEditSettings ? 'outlets' : 'appearance');
   const { theme, setTheme } = useTheme();
   
   return (
@@ -42,6 +43,7 @@ export default function SettingsPage() {
 
       <div className="flex overflow-x-auto space-x-2 border-b border-border pb-px">
         {[
+          { id: 'outlets', label: 'Cabang / Outlet', icon: Store, visible: canEditSettings },
           { id: 'location', label: 'Lokasi & Absensi', icon: MapPin, visible: canEditSettings },
           { id: 'salary', label: 'Toleransi & Potongan', icon: Calculator, visible: canEditSettings },
           { id: 'appearance', label: 'Tampilan', icon: Sun, visible: true },
@@ -64,6 +66,7 @@ export default function SettingsPage() {
       </div>
 
       <div className="mt-6">
+        {activeTab === 'outlets' && <OutletManagementTab canEdit={canEditSettings} />}
         {activeTab === 'location' && <LocationTab />}
         {activeTab === 'salary' && <SalaryTab />}
         {activeTab === 'appearance' && (
@@ -196,8 +199,18 @@ function LocationTab() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Lokasi Warkop & Radius Absensi</CardTitle>
+        <CardTitle>Lokasi Warkop & Radius Absensi (Default Fallback)</CardTitle>
         <p className="text-sm text-muted-foreground">Tentukan lokasi titik pusat Warkop dan radius maksimal (dalam meter) agar karyawan bisa absen.</p>
+        
+        <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3.5 dark:border-amber-900/40 dark:bg-amber-950/30 text-xs text-amber-900 dark:text-amber-200">
+          <p className="font-bold flex items-center gap-1.5 mb-1 text-amber-800 dark:text-amber-300">
+            <Info className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+            Catatan Prioritas Geofencing GPS:
+          </p>
+          <p className="leading-relaxed">
+            Lokasi pada tab ini berfungsi sebagai <strong>Lokasi Utama Default (Fallback)</strong>. Untuk mengatur koordinat GPS, alamat, dan radius khusus cabang <strong>SELON 1, SELON 2</strong>, dst., silakan gunakan tab <strong>Cabang / Outlet</strong>.
+          </p>
+        </div>
       </CardHeader>
       <CardContent className="space-y-6">
         {msg && <p className="text-emerald-500 font-medium bg-emerald-500/10 p-3 rounded-md">{msg}</p>}
@@ -573,13 +586,18 @@ function DatabaseTab() {
 }
 
 function AuditLogTab() {
-  const { data: logs, isLoading } = useQuery({
+  const { data: logsData, isLoading } = useQuery({
     queryKey: ['auditLogs'],
     queryFn: async () => {
-      const res = await api.get('/logs');
-      return res.data;
+      try {
+        const res = await api.get('/logs');
+        return Array.isArray(res.data) ? res.data : [];
+      } catch {
+        return [];
+      }
     }
   });
+  const logs = Array.isArray(logsData) ? logsData : [];
 
   return (
     <Card>

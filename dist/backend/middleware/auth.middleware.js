@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { prisma } from '../lib/prisma.js';
+import { getJwtSecret } from '../lib/jwt.js';
 export const authenticate = async (req, res, next) => {
     try {
         const authHeader = req.headers.authorization;
@@ -10,7 +11,7 @@ export const authenticate = async (req, res, next) => {
         if (!token || token === 'undefined' || token === 'null' || token.trim() === '') {
             return res.status(401).json({ message: 'Unauthorized: Invalid token', code: 'TOKEN_EXPIRED' });
         }
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
+        const decoded = jwt.verify(token, getJwtSecret());
         const user = await prisma.user.findUnique({
             where: { id: decoded.id },
             include: {

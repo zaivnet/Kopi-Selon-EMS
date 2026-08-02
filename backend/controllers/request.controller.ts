@@ -2,6 +2,30 @@ import { Request, Response } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { AuthRequest } from '../middleware/auth.middleware.js';
 
+// ─────────────────────────────────────────────
+// Helper: normalize a date string / Date to
+// midnight in WIB (UTC+7). Returns a JS Date
+// that can be safely stored/compared with Prisma.
+// ─────────────────────────────────────────────
+function toWIBMidnight(dateInput: string | Date): Date {
+  // Parse to UTC ms, shift +7 h, then strip the time part
+  const d = new Date(dateInput);
+  // offset in ms: WIB = UTC+7
+  const WIB_OFFSET_MS = 7 * 60 * 60 * 1000;
+  const localMs = d.getTime() + WIB_OFFSET_MS;
+  const localDate = new Date(localMs);
+  // Build a "yyyy-mm-dd 00:00:00 UTC" so Prisma stores exact midnight WIB
+  const y = localDate.getUTCFullYear();
+  const m = localDate.getUTCMonth();
+  const day = localDate.getUTCDate();
+  return new Date(Date.UTC(y, m, day, 0, 0, 0, 0) - WIB_OFFSET_MS);
+}
+
+// Returns today's midnight in WIB as a JS Date
+function wibTodayStart(): Date {
+  return toWIBMidnight(new Date());
+}
+
 // Helper to format sequence number REQ-YYYYMMDD-XXXX
 async function generateRequestNumber(): Promise<string> {
   const today = new Date();
@@ -85,6 +109,7 @@ export const getRequests = async (req: AuthRequest, res: Response) => {
             lastName: true,
             photoUrl: true,
             shift: true,
+            outlet: { select: { id: true, code: true, name: true } },
             user: { select: { username: true } },
           },
         },
@@ -95,6 +120,7 @@ export const getRequests = async (req: AuthRequest, res: Response) => {
             lastName: true,
             photoUrl: true,
             shift: true,
+            outlet: { select: { id: true, code: true, name: true } },
           },
         },
         targetShift: true,
@@ -202,22 +228,83 @@ export const createRequest = async (req: AuthRequest, res: Response) => {
     }
 
     const requestNumber = await generateRequestNumber();
-    const startDateTime = new Date(startDate);
-    const endDateTime = endDate ? new Date(endDate) : startDateTime;
+
+    // ── 1. Normalisasi timezone WIB ──────────────────────────────
+    // startDate bisa berupa "2026-08-05" (date-only) atau ISO datetime.
+    // toWIBMidnight memastikan tidak ada pergeseran hari karena UTC offset.
+    const startDateTime = toWIBMidnight(startDate);
+    const endDateTime   = endDate ? toWIBMidnight(endDate) : new Date(startDateTime.getTime());
+
+    // Untuk OVERTIME dengan komponen waktu, parse apa adanya (bukan midnight)
+    const startDateTimeRaw = new Date(startDate);
+    const endDateTimeRaw   = endDate ? new Date(endDate) : startDateTimeRaw;
+
+    // ── 2. end >= start ──────────────────────────────────────────
+    if (type !== 'OVERTIME' && endDateTime < startDateTime) {
+      return res.status(400).json({ message: 'Tanggal selesai tidak boleh lebih awal dari tanggal mulai.' });
+    }
 
     if (type === 'OVERTIME') {
       if (!endDate) {
         return res.status(400).json({ message: 'Tanggal selesai lembur wajib diisi.' });
       }
-      if (endDateTime <= startDateTime) {
+      if (endDateTimeRaw <= startDateTimeRaw) {
         return res.status(400).json({ message: 'Waktu selesai lembur harus setelah waktu mulai.' });
       }
     }
 
+    // ── 3. Future date guard (Validasi Tanggal Lampau) ──────────
+    if (!isDraft) {
+      const todayWIB = wibTodayStart();
+
+      if (type === 'SWAP_SHIFT' || type === 'CHANGE_SHIFT') {
+        if (startDateTime < todayWIB) {
+          return res.status(400).json({
+            message: 'Pengajuan tukar atau ganti shift hanya dapat dilakukan untuk tanggal hari ini atau yang akan datang.',
+          });
+        }
+      } else if (type === 'LEAVE' || type === 'PERMISSION' || type === 'OVERTIME') {
+        if (startDateTime < todayWIB) {
+          return res.status(400).json({
+            message: 'Pengajuan cuti, izin, atau lembur hanya dapat dilakukan untuk tanggal hari ini atau yang akan datang.',
+          });
+        }
+      } else if (type === 'SICK_LEAVE') {
+        const maxBackdate = new Date(todayWIB);
+        maxBackdate.setDate(maxBackdate.getDate() - 7);
+        if (startDateTime < maxBackdate) {
+          return res.status(400).json({
+            message: 'Pengajuan izin sakit susulan maksimal 7 hari ke belakang dari hari ini.',
+          });
+        }
+      }
+    }
+
+    // ── 4. Duplikat / Overlap Request Guard ─────────────────────
+    if (!isDraft) {
+      const overlappingRequest = await prisma.employeeRequest.findFirst({
+        where: {
+          employeeId: requesterEmployee.id,
+          deletedAt: null,
+          status: {
+            in: ['Submitted', 'Waiting Employee Approval', 'Waiting Staff Approval', 'Approved'],
+          },
+          startDate: { lte: type === 'OVERTIME' ? endDateTimeRaw : endDateTime },
+          endDate:   { gte: type === 'OVERTIME' ? startDateTimeRaw : startDateTime },
+        },
+      });
+
+      if (overlappingRequest) {
+        return res.status(400).json({
+          message: `Anda sudah memiliki pengajuan aktif (${overlappingRequest.requestNumber}) pada rentang tanggal tersebut. Harap selesaikan atau batalkan terlebih dahulu.`,
+        });
+      }
+    }
+
+    // ── 5. Clock-in check untuk SWAP/CHANGE ─────────────────────
     if (type === 'SWAP_SHIFT' || type === 'CHANGE_SHIFT') {
-      const targetDate = new Date(startDate);
-      const dateStart = new Date(targetDate.setHours(0, 0, 0, 0));
-      const dateEnd = new Date(targetDate.setHours(23, 59, 59, 999));
+      const dateStart = new Date(startDateTime.getFullYear(), startDateTime.getMonth(), startDateTime.getDate(), 0, 0, 0, 0);
+      const dateEnd   = new Date(startDateTime.getFullYear(), startDateTime.getMonth(), startDateTime.getDate(), 23, 59, 59, 999);
 
       const existingAttendance = await prisma.attendance.findFirst({
         where: {
@@ -234,6 +321,7 @@ export const createRequest = async (req: AuthRequest, res: Response) => {
         });
       }
     }
+
 
     let initialStatus = 'Submitted';
     let peerStatus: string | null = null;
@@ -270,8 +358,10 @@ export const createRequest = async (req: AuthRequest, res: Response) => {
           employeeId: requesterEmployee.id,
           type,
           permissionType: type === 'PERMISSION' ? permissionType || 'ABSENT' : null,
-          startDate: startDateTime,
-          endDate: endDateTime,
+          // Simpan date yang sudah ternormalisasi WIB.
+          // Untuk OVERTIME kita simpan datetime asli (bukan midnight) agar jam lembur tersimpan.
+          startDate: type === 'OVERTIME' ? startDateTimeRaw : startDateTime,
+          endDate:   type === 'OVERTIME' ? endDateTimeRaw   : endDateTime,
           currentShiftId: requesterEmployee.shiftId,
           targetShiftId: type === 'CHANGE_SHIFT' ? targetShiftId : null,
           targetEmployeeId: type === 'SWAP_SHIFT' ? targetEmployeeId : null,
@@ -304,7 +394,7 @@ export const createRequest = async (req: AuthRequest, res: Response) => {
       if (type === 'SWAP_SHIFT' && !isDraft) {
         const peer = await tx.employee.findUnique({ where: { id: targetEmployeeId } });
         const peerName = peer ? `${peer.firstName} ${peer.lastName || ''}`.trim() : 'Rekan Kerja';
-        
+
         await tx.requestTimeline.create({
           data: {
             requestId: created.id,
@@ -543,16 +633,22 @@ export const approveRequest = async (req: AuthRequest, res: Response) => {
           },
         });
 
+        const empOutletId = (request.employee as any).outletId;
+
         if (existingSchedule) {
           await tx.workSchedule.update({
             where: { id: existingSchedule.id },
-            data: { shiftId: request.targetShiftId },
+            data: {
+              shiftId: request.targetShiftId,
+              outletId: existingSchedule.outletId || empOutletId || null
+            },
           });
         } else {
           await tx.workSchedule.create({
             data: {
               employeeId: request.employeeId,
               shiftId: request.targetShiftId,
+              outletId: empOutletId || null,
               date: dateOnly,
             },
           });
@@ -570,17 +666,24 @@ export const approveRequest = async (req: AuthRequest, res: Response) => {
         const reqShiftId = reqSchedule?.shiftId || request.employee.shiftId;
         const targetShiftId = targetSchedule?.shiftId || request.targetEmployee?.shiftId;
 
+        const reqOutletId = reqSchedule?.outletId || (request.employee as any).outletId;
+        const targetOutletId = targetSchedule?.outletId || (request.targetEmployee as any)?.outletId;
+
         if (targetShiftId) {
           if (reqSchedule) {
             await tx.workSchedule.update({
               where: { id: reqSchedule.id },
-              data: { shiftId: targetShiftId },
+              data: {
+                shiftId: targetShiftId,
+                outletId: targetOutletId || reqOutletId || null
+              },
             });
           } else {
             await tx.workSchedule.create({
               data: {
                 employeeId: request.employeeId,
                 shiftId: targetShiftId,
+                outletId: targetOutletId || reqOutletId || null,
                 date: dateOnly,
               },
             });
@@ -591,13 +694,17 @@ export const approveRequest = async (req: AuthRequest, res: Response) => {
           if (targetSchedule) {
             await tx.workSchedule.update({
               where: { id: targetSchedule.id },
-              data: { shiftId: reqShiftId },
+              data: {
+                shiftId: reqShiftId,
+                outletId: reqOutletId || targetOutletId || null
+              },
             });
           } else {
             await tx.workSchedule.create({
               data: {
                 employeeId: request.targetEmployeeId,
                 shiftId: reqShiftId,
+                outletId: reqOutletId || targetOutletId || null,
                 date: dateOnly,
               },
             });
@@ -731,7 +838,7 @@ export const cancelRequest = async (req: AuthRequest, res: Response) => {
 
     const isAdmin = req.user?.role?.name === 'Administrator';
     const canManageAllRequests = isAdmin || (Array.isArray(req.user?.permissions) && req.user.permissions.includes('request_center.approve'));
-  if (request.employeeId !== userEmployeeId && !canManageAllRequests) {
+    if (request.employeeId !== userEmployeeId && !canManageAllRequests) {
       return res.status(403).json({ message: 'Anda hanya dapat membatalkan permintaan yang Anda buat sendiri.' });
     }
 
@@ -969,3 +1076,100 @@ export const getEligibleSwapPeers = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ message: 'Gagal mengambil daftar rekan kerja.' });
   }
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/requests/shift-preview?date=YYYY-MM-DD&targetEmployeeId=...
+// Returns the effective shift of the current user & an optional target employee
+// on a given date, accounting for WorkSchedule overrides.
+// ─────────────────────────────────────────────────────────────────────────────
+export const getShiftPreview = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const { date, targetEmployeeId } = req.query;
+
+    if (!date || typeof date !== 'string') {
+      return res.status(400).json({ message: 'Parameter tanggal wajib diisi.' });
+    }
+
+    const previewDate = toWIBMidnight(date);
+    const dayStart    = new Date(previewDate.getFullYear(), previewDate.getMonth(), previewDate.getDate(), 0, 0, 0, 0);
+    const dayEnd      = new Date(previewDate.getFullYear(), previewDate.getMonth(), previewDate.getDate(), 23, 59, 59, 999);
+
+    // Helper: get effective shift for employee on a date
+    async function getEffectiveShift(empId: string) {
+      // Priority: WorkSchedule override > default shift
+      const schedule = await prisma.workSchedule.findFirst({
+        where: { employeeId: empId, date: { gte: dayStart, lte: dayEnd }, deletedAt: null },
+        include: { shift: true },
+      });
+      if (schedule?.shift) {
+        return { shift: schedule.shift, source: 'schedule' as const };
+      }
+      const emp = await prisma.employee.findFirst({
+        where: { id: empId, deletedAt: null },
+        include: { shift: true },
+      });
+      return { shift: emp?.shift ?? null, source: 'default' as const };
+    }
+
+    // Requester's shift
+    const requesterEmployee = await prisma.employee.findFirst({
+      where: { userId, deletedAt: null },
+    });
+
+    if (!requesterEmployee) {
+      return res.status(400).json({ message: 'Profil karyawan tidak ditemukan.' });
+    }
+
+    const myShiftData = await getEffectiveShift(requesterEmployee.id);
+
+    const result: any = {
+      date: date,
+      myShift: myShiftData.shift
+        ? {
+            id: myShiftData.shift.id,
+            name: myShiftData.shift.name,
+            startTime: myShiftData.shift.startTime,
+            endTime: myShiftData.shift.endTime,
+            source: myShiftData.source,
+          }
+        : null,
+      targetShift: null,
+    };
+
+    if (targetEmployeeId && typeof targetEmployeeId === 'string') {
+      const targetShiftData = await getEffectiveShift(targetEmployeeId);
+      result.targetShift = targetShiftData.shift
+        ? {
+            id: targetShiftData.shift.id,
+            name: targetShiftData.shift.name,
+            startTime: targetShiftData.shift.startTime,
+            endTime: targetShiftData.shift.endTime,
+            source: targetShiftData.source,
+          }
+        : null;
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error('getShiftPreview error:', error);
+    res.status(500).json({ message: 'Gagal mengambil preview jadwal shift.' });
+  }
+}
+
+export async function clearAllRequests(req: Request, res: Response) {
+  try {
+    const deletedCount = await prisma.employeeRequest.updateMany({
+      where: { deletedAt: null },
+      data: { deletedAt: new Date() }
+    });
+
+    res.json({
+      message: 'Semua data Request Center berhasil dibersihkan.',
+      deletedCount: deletedCount.count
+    });
+  } catch (error: any) {
+    console.error('clearAllRequests Error:', error);
+    res.status(500).json({ message: 'Gagal membersihkan data Request Center.' });
+  }
+}

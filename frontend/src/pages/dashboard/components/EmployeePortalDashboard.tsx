@@ -43,6 +43,11 @@ export default function EmployeePortalDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [currentTime, setCurrentTime] = useState<string>('');
+  // activeTabPerOutlet: masing-masing kartu outlet punya state tab sendiri
+  const [activeTabPerOutlet, setActiveTabPerOutlet] = useState<Record<string, 'today' | 'tomorrow' | 'lusa'>>({});
+  const getTab = (outletId: string) => activeTabPerOutlet[outletId] ?? 'today';
+  const setTab = (outletId: string, tab: 'today' | 'tomorrow' | 'lusa') =>
+    setActiveTabPerOutlet((prev) => ({ ...prev, [outletId]: tab }));
 
   useEffect(() => {
     const updateTimer = () => {
@@ -75,30 +80,38 @@ export default function EmployeePortalDashboard() {
       const startStr = dayjs(todayObj).format('YYYY-MM-DD');
       const endStr = dayjs(todayObj).add(3, 'day').format('YYYY-MM-DD');
 
-      const [empRes, shiftRes, schRes] = await Promise.all([
+      const [empRes, shiftRes, schRes, outletRes] = await Promise.all([
         api.get('/employees').catch(() => ({ data: [] })),
         api.get('/shifts').catch(() => ({ data: [] })),
-        api.get(`/shifts/schedules?startDate=${startStr}&endDate=${endStr}`).catch(() => ({ data: [] }))
+        api.get(`/shifts/schedules?startDate=${startStr}&endDate=${endStr}`).catch(() => ({ data: [] })),
+        api.get('/outlets').catch(() => ({ data: [] }))
       ]);
+
+      const fetchedOutlets = Array.isArray(outletRes.data) && outletRes.data.length > 0 ? outletRes.data : [];
+      const outlets = fetchedOutlets.length > 0 ? fetchedOutlets : [
+        { id: 'selon-1', code: 'SELON 1', name: 'SELON 1' },
+        { id: 'selon-2', code: 'SELON 2', name: 'SELON 2' }
+      ];
 
       return {
         employees: Array.isArray(empRes.data) ? empRes.data : [],
         shifts: Array.isArray(shiftRes.data) ? shiftRes.data : [],
-        schedules: Array.isArray(schRes.data) ? schRes.data : []
+        schedules: Array.isArray(schRes.data) ? schRes.data : [],
+        outlets
       };
     },
     refetchInterval: 30_000
   });
 
-  const threeDaysData = useMemo(() => {
+  const threeDaysDataByOutlet = useMemo(() => {
     if (!rosterQuery.data) return [];
-    const { employees, shifts, schedules } = rosterQuery.data;
+    const { employees, shifts, schedules, outlets } = rosterQuery.data;
 
     const baseToday = dayjs();
     const days = [
-      { key: 'today', label: 'Hari Ini', date: baseToday },
-      { key: 'tomorrow', label: 'Besok', date: baseToday.add(1, 'day') },
-      { key: 'lusa', label: 'Lusa', date: baseToday.add(2, 'day') }
+      { key: 'today' as const, label: 'Hari Ini', date: baseToday },
+      { key: 'tomorrow' as const, label: 'Besok', date: baseToday.add(1, 'day') },
+      { key: 'lusa' as const, label: 'Lusa', date: baseToday.add(2, 'day') }
     ];
 
     const workerEmployees = employees.filter((emp: any) => {
@@ -106,92 +119,133 @@ export default function EmployeePortalDashboard() {
       return !roleName || roleName === 'Karyawan';
     });
 
-    return days.map((d) => {
-      const targetDateStr = d.date.format('YYYY-MM-DD');
-      const targetTime = d.date.toDate().getTime();
+    const activeOutlets = Array.isArray(outlets) && outlets.length > 0
+      ? outlets
+      : [
+          { id: 'selon-1', code: 'SELON 1', name: 'SELON 1' },
+          { id: 'selon-2', code: 'SELON 2', name: 'SELON 2' }
+        ];
 
-      const shiftGroups: Record<string, any[]> = {};
-      shifts.forEach((s: any) => {
-        shiftGroups[s.id] = [];
-      });
-      shiftGroups['OFF'] = [];
+    return activeOutlets.map((outletItem: any) => {
+      const daysData: Record<'today' | 'tomorrow' | 'lusa', any> = {
+        today: null,
+        tomorrow: null,
+        lusa: null
+      };
 
-      workerEmployees.forEach((emp: any) => {
-        let leaveTag = null;
+      days.forEach((d) => {
+        const targetDateStr = d.date.format('YYYY-MM-DD');
+        const targetTime = d.date.toDate().getTime();
 
-        // Approved Leaves
-        if (Array.isArray(emp.leaves)) {
-          const matchLeave = emp.leaves.find((l: any) => {
-            if (!l.startDate) return false;
-            const sTime = new Date(l.startDate).setHours(0, 0, 0, 0);
-            const eTime = l.endDate ? new Date(l.endDate).setHours(23, 59, 59, 999) : sTime;
-            return targetTime >= sTime && targetTime <= eTime;
-          });
-          if (matchLeave) {
-            leaveTag = matchLeave.type === 'SICK' ? 'Sakit' : 'Cuti';
+        const shiftGroups: Record<string, any[]> = {};
+        shifts.forEach((s: any) => {
+          shiftGroups[s.id] = [];
+        });
+        shiftGroups['OFF'] = [];
+
+        workerEmployees.forEach((emp: any) => {
+          const empSchedules = Array.isArray(emp.workSchedules) ? emp.workSchedules : [];
+          const matchSchedule =
+            schedules.find((sch: any) => sch.employeeId === emp.id && dayjs(sch.date).format('YYYY-MM-DD') === targetDateStr) ||
+            empSchedules.find((sch: any) => dayjs(sch.date).format('YYYY-MM-DD') === targetDateStr);
+
+          const activeOutlet = matchSchedule?.outlet || emp.outlet;
+          const activeOutletId = activeOutlet?.id ?? null;
+
+          // ── Logika matching outlet yang robust ───────────────────────────
+          const normalizeCode = (s: string) => s.toUpperCase().replace(/[\s_-]+/g, '');
+          const isIdMatch   = activeOutletId && activeOutletId === outletItem.id;
+          const isCodeMatch = !isIdMatch && activeOutlet?.code && outletItem.code &&
+            normalizeCode(activeOutlet.code) === normalizeCode(outletItem.code);
+          const isUnassigned = !activeOutletId && !activeOutlet?.code;
+          const isUnassignedFallback = isUnassigned && activeOutlets.indexOf(outletItem) === 0;
+
+          const isMatch = !!(isIdMatch || isCodeMatch || isUnassignedFallback);
+
+          if (!isMatch && activeOutlets.length > 1) {
+            return;
           }
-        }
 
-        // Approved Permissions
-        if (!leaveTag && Array.isArray(emp.permissions)) {
-          const matchPerm = emp.permissions.find((p: any) => {
-            if (!p.date) return false;
-            return dayjs(p.date).format('YYYY-MM-DD') === targetDateStr;
-          });
-          if (matchPerm) {
-            leaveTag = 'Izin';
+          let leaveTag = null;
+          if (Array.isArray(emp.leaves)) {
+            const matchLeave = emp.leaves.find((l: any) => {
+              if (!l.startDate) return false;
+              const sTime = new Date(l.startDate).setHours(0, 0, 0, 0);
+              const eTime = l.endDate ? new Date(l.endDate).setHours(23, 59, 59, 999) : sTime;
+              return targetTime >= sTime && targetTime <= eTime;
+            });
+            if (matchLeave) {
+              leaveTag = matchLeave.type === 'SICK' ? 'Sakit' : 'Cuti';
+            }
           }
-        }
 
-        if (leaveTag) {
-          shiftGroups['OFF'].push({ ...emp, statusTag: leaveTag });
-          return;
-        }
+          if (!leaveTag && Array.isArray(emp.permissions)) {
+            const matchPerm = emp.permissions.find((p: any) => {
+              if (!p.date) return false;
+              return dayjs(p.date).format('YYYY-MM-DD') === targetDateStr;
+            });
+            if (matchPerm) {
+              leaveTag = 'Izin';
+            }
+          }
 
-        // WorkSchedule set by Admin/Staff via Roster Matrix Builder
-        const empSchedules = Array.isArray(emp.workSchedules) ? emp.workSchedules : [];
-        const matchSchedule =
-          schedules.find((sch: any) => sch.employeeId === emp.id && dayjs(sch.date).format('YYYY-MM-DD') === targetDateStr) ||
-          empSchedules.find((sch: any) => dayjs(sch.date).format('YYYY-MM-DD') === targetDateStr);
+          const memberData = {
+            ...emp,
+            outletCode: activeOutlet?.code ?? '',
+            outletName: activeOutlet?.name || outletItem.name
+          };
 
-        if (matchSchedule) {
-          if (matchSchedule.shiftId && matchSchedule.shiftId !== 'OFF' && shiftGroups[matchSchedule.shiftId]) {
-            shiftGroups[matchSchedule.shiftId].push(emp);
+          if (leaveTag) {
+            shiftGroups['OFF'].push({ ...memberData, statusTag: leaveTag });
+            return;
+          }
+
+          if (matchSchedule) {
+            if (matchSchedule.shiftId && matchSchedule.shiftId !== 'OFF' && shiftGroups[matchSchedule.shiftId]) {
+              shiftGroups[matchSchedule.shiftId].push(memberData);
+            } else {
+              shiftGroups['OFF'].push({ ...memberData, statusTag: 'Libur (OFF)' });
+            }
+            return;
+          }
+
+          if (emp.shiftId && shiftGroups[emp.shiftId]) {
+            shiftGroups[emp.shiftId].push(memberData);
+          } else if (emp.shift?.id && shiftGroups[emp.shift.id]) {
+            shiftGroups[emp.shift.id].push(memberData);
           } else {
-            shiftGroups['OFF'].push({ ...emp, statusTag: 'Libur (OFF)' });
+            shiftGroups['OFF'].push({ ...memberData, statusTag: 'Libur (OFF)' });
           }
-          return;
-        }
+        });
 
-        // Default Master Shift
-        if (emp.shiftId && shiftGroups[emp.shiftId]) {
-          shiftGroups[emp.shiftId].push(emp);
-        } else if (emp.shift?.id && shiftGroups[emp.shift.id]) {
-          shiftGroups[emp.shift.id].push(emp);
-        } else {
-          shiftGroups['OFF'].push({ ...emp, statusTag: 'Libur (OFF)' });
-        }
+        const shiftList = shifts.map((s: any) => ({
+          shiftId: s.id,
+          shiftName: s.name,
+          shiftTime: `${s.startTime} - ${s.endTime}`,
+          members: shiftGroups[s.id] || []
+        }));
+
+        shiftList.push({
+          shiftId: 'OFF',
+          shiftName: '⛔ Libur / Off',
+          shiftTime: 'Off',
+          members: shiftGroups['OFF'] || []
+        });
+
+        daysData[d.key] = {
+          formattedDate: d.date.format('dddd, D MMMM YYYY'),
+          shifts: shiftList
+        };
       });
 
-      const shiftList = shifts.map((s: any) => ({
-        shiftId: s.id,
-        shiftName: s.name,
-        shiftTime: `${s.startTime} - ${s.endTime}`,
-        members: shiftGroups[s.id] || []
-      }));
-
-      shiftList.push({
-        shiftId: 'OFF',
-        shiftName: '⛔ Libur / Off',
-        shiftTime: 'Off',
-        members: shiftGroups['OFF'] || []
-      });
+      const displayTitle = outletItem.code 
+        ? `Jadwal Shift ${outletItem.code.includes('SELON') ? outletItem.code : `SELON ${outletItem.code}`}`
+        : `Jadwal Shift ${outletItem.name}`;
 
       return {
-        label: d.label,
-        formattedDate: d.date.format('dddd, D MMMM YYYY'),
-        isToday: d.key === 'today',
-        shifts: shiftList
+        outlet: outletItem,
+        title: displayTitle,
+        days: daysData
       };
     });
   }, [rosterQuery.data]);
@@ -274,7 +328,9 @@ export default function EmployeePortalDashboard() {
                 <p className="mt-1 text-sm sm:text-base font-bold leading-snug text-slate-900 dark:text-amber-100">
                   {shift ? `${shift.startTime} - ${shift.endTime}` : 'Tidak Ada Shift'}
                 </p>
-                <p className="mt-0.5 text-[11px] sm:text-xs font-semibold text-amber-700 dark:text-amber-400">{shift?.name || 'Reguler'}</p>
+                <p className="mt-0.5 text-[11px] sm:text-xs font-semibold text-amber-700 dark:text-amber-400">
+                  {shift?.name || 'Reguler'} · 📍 {(statusData as any)?.location?.name || (statusData as any)?.outlet?.name || 'Selon 1'}
+                </p>
               </div>
               <div className="rounded-2xl border border-amber-500/15 bg-amber-500/5 p-3 sm:p-4 dark:border-amber-900/30 dark:bg-amber-950/20">
                 <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-amber-300/60">Status Catatan Absensi</p>
@@ -350,81 +406,91 @@ export default function EmployeePortalDashboard() {
         </div>
 
         {rosterQuery.isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="h-48 animate-pulse rounded-2xl bg-amber-500/10 dark:bg-amber-950/20" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="h-48 animate-pulse rounded-2xl bg-amber-500/10 dark:bg-amber-950/20" />
             <div className="h-48 animate-pulse rounded-2xl bg-amber-500/10 dark:bg-amber-950/20" />
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {threeDaysData.map((dayData, idx) => (
-              <Card
-                key={idx}
-                className={cn(
-                  'overflow-hidden border shadow-sm transition-all',
-                  dayData.isToday
-                    ? 'border-amber-500/40 bg-gradient-to-b from-amber-500/10 via-white to-white dark:from-amber-950/30 dark:via-[#221812] dark:to-[#221812] dark:border-amber-700/50'
-                    : 'border-amber-500/20 bg-white dark:border-[#3e2e24] dark:bg-[#221812]'
-                )}
-              >
-                <CardHeader className="p-4 pb-2 border-b border-amber-500/10 dark:border-amber-950/40">
-                  <div className="flex items-center justify-between">
-                    <span className={cn(
-                      'rounded-full px-2.5 py-0.5 text-[11px] font-extrabold uppercase tracking-wider',
-                      dayData.isToday
-                        ? 'bg-amber-500 text-slate-950 shadow-sm'
-                        : 'bg-amber-500/15 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300'
-                    )}>
-                      {dayData.label}
-                    </span>
-                    <span className="text-[11px] font-medium text-slate-500 dark:text-amber-200/60">
-                      {dayData.formattedDate}
-                    </span>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {threeDaysDataByOutlet.map((outletRoster: any) => (
+              <Card key={outletRoster.outlet.id} className="border-amber-500/20 bg-white dark:border-[#3e2e24] dark:bg-[#221812]">
+                <CardHeader className="flex flex-col sm:flex-row sm:items-start justify-between pb-2 gap-2">
+                  <div>
+                    <CardTitle className="text-lg font-bold text-slate-900 dark:text-amber-100">{outletRoster.title}</CardTitle>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-amber-300/60">Hari Ini, Besok & Lusa (khusus Karyawan)</p>
+                  </div>
+                  
+                  {/* Elegant Tabs */}
+                  <div className="flex rounded-xl bg-slate-100 p-1 dark:bg-slate-800 shrink-0">
+                    {(['today', 'tomorrow', 'lusa'] as const).map((key) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setTab(outletRoster.outlet.id, key)}
+                        className={cn(
+                          'rounded-lg px-2.5 py-1 text-xs font-bold transition-all',
+                          getTab(outletRoster.outlet.id) === key
+                            ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-amber-100'
+                            : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+                        )}
+                      >
+                        {key === 'today' ? 'Hari Ini' : key === 'tomorrow' ? 'Besok' : 'Lusa'}
+                      </button>
+                    ))}
                   </div>
                 </CardHeader>
 
                 <CardContent className="p-4 space-y-3 max-h-[380px] overflow-y-auto scrollbar-thin">
-                  {dayData.shifts.map((group) => (
-                    <div
-                      key={group.shiftId}
-                      className={cn(
-                        'rounded-xl p-3 border text-xs',
-                        group.shiftId === 'OFF'
-                          ? 'bg-slate-50 border-slate-200/70 dark:bg-slate-900/50 dark:border-slate-800'
-                          : 'bg-amber-500/5 border-amber-500/15 dark:bg-amber-950/30 dark:border-amber-900/40'
-                      )}
-                    >
-                      <div className="flex items-center justify-between font-bold text-slate-800 dark:text-amber-100 pb-1.5 border-b border-slate-200/60 dark:border-slate-800">
-                        <span className="truncate">{group.shiftName}</span>
-                        <span className="text-[10px] font-mono text-amber-700 dark:text-amber-400 shrink-0 ml-1">
-                          {group.shiftTime} ({group.members.length})
-                        </span>
-                      </div>
-
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        {group.members.length === 0 ? (
-                          <span className="text-[10px] italic text-slate-400">Tidak ada personel</span>
-                        ) : (
-                          group.members.map((m: any) => (
-                            <span
-                              key={m.id}
-                              className="inline-flex items-center gap-1 rounded-lg bg-white px-2 py-1 text-[11px] font-semibold text-slate-800 shadow-sm border border-slate-200/70 dark:bg-slate-800 dark:text-amber-100 dark:border-slate-700"
-                            >
-                              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-amber-500/20 text-[9px] font-bold text-amber-900 dark:text-amber-200">
-                                {m.firstName.charAt(0)}
-                              </span>
-                              <span>{m.firstName} {m.lastName || ''}</span>
-                              {m.statusTag && (
-                                <span className="text-[9px] font-extrabold text-amber-600 dark:text-amber-400">
-                                  ({m.statusTag})
-                                </span>
-                              )}
+                  {outletRoster.days[getTab(outletRoster.outlet.id)] ? (
+                    <div className="space-y-3">
+                      <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-400">
+                        🗓️ {outletRoster.days[getTab(outletRoster.outlet.id)].formattedDate}
+                      </p>
+                      {outletRoster.days[getTab(outletRoster.outlet.id)].shifts.map((group: any) => (
+                        <div
+                          key={group.shiftId}
+                          className={cn(
+                            'rounded-xl p-3 border text-xs',
+                            group.shiftId === 'OFF'
+                              ? 'bg-slate-50 border-slate-200/70 dark:bg-slate-900/50 dark:border-slate-800'
+                              : 'bg-amber-500/5 border-amber-500/15 dark:bg-amber-950/30 dark:border-amber-900/40'
+                          )}
+                        >
+                          <div className="flex items-center justify-between font-bold text-slate-800 dark:text-amber-100 pb-1.5 border-b border-slate-200/60 dark:border-slate-800">
+                            <span className="truncate">{group.shiftName}</span>
+                            <span className="text-[10px] font-mono text-amber-700 dark:text-amber-400 shrink-0 ml-1">
+                              {group.shiftTime} ({group.members.length})
                             </span>
-                          ))
-                        )}
-                      </div>
+                          </div>
+
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {group.members.length === 0 ? (
+                              <span className="text-[10px] italic text-slate-400">Tidak ada personel</span>
+                            ) : (
+                              group.members.map((m: any) => (
+                                <span
+                                  key={m.id}
+                                  className="inline-flex items-center gap-1 rounded-lg bg-white px-2 py-1 text-[11px] font-semibold text-slate-800 shadow-sm border border-slate-200/70 dark:bg-slate-800 dark:text-amber-100 dark:border-slate-700"
+                                >
+                                  <span className="flex h-4 w-4 items-center justify-center rounded-full bg-amber-500/20 text-[9px] font-bold text-amber-900 dark:text-amber-200">
+                                    {m.firstName.charAt(0)}
+                                  </span>
+                                  <span>{m.firstName} {m.lastName || ''}</span>
+                                  {m.statusTag && (
+                                    <span className="text-[9px] font-extrabold text-amber-600 dark:text-amber-400">
+                                      ({m.statusTag})
+                                    </span>
+                                  )}
+                                </span>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  ) : (
+                    <EmptyState title="Belum ada penugasan" description="Jadwal untuk hari ini belum diatur." />
+                  )}
                 </CardContent>
               </Card>
             ))}

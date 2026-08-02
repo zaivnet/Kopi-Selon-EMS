@@ -46,6 +46,27 @@ model User {
   deletedAt    DateTime?
 }
 
+model Outlet {
+  id          String         @id @default(uuid())
+  code        String         @unique
+  name        String
+  address     String?
+  phone       String?
+  latitude    Float
+  longitude   Float
+  radius      Int            @default(100) // dalam meter
+  isActive    Boolean        @default(true)
+
+  employees     Employee[]
+  workSchedules WorkSchedule[]
+  attendances   Attendance[]
+
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  deletedAt   DateTime?
+  @@index([createdAt])
+}
+
 model Employee {
   id              String         @id @default(uuid())
   userId          String         @unique
@@ -59,6 +80,8 @@ model Employee {
   status          String         @default("ACTIVE")
   shiftId         String?
   shift           WorkShift?     @relation(fields: [shiftId], references: [id])
+  outletId        String?
+  outlet          Outlet?        @relation(fields: [outletId], references: [id])
   baseSalary      Float?
   photoUrl        String?
   
@@ -80,6 +103,8 @@ model Attendance {
   id          String            @id @default(uuid())
   employeeId  String
   employee    Employee          @relation(fields: [employeeId], references: [id])
+  outletId    String?
+  outlet      Outlet?           @relation(fields: [outletId], references: [id])
   date        DateTime          
   clockIn     DateTime?
   clockOut    DateTime?
@@ -131,6 +156,8 @@ model WorkSchedule {
   employee    Employee  @relation(fields: [employeeId], references: [id])
   shiftId     String
   shift       WorkShift @relation(fields: [shiftId], references: [id])
+  outletId    String?
+  outlet      Outlet?   @relation(fields: [outletId], references: [id])
   date        DateTime  
 
   createdAt   DateTime  @default(now())
@@ -343,4 +370,3 @@ model RequestTimeline {
 
   createdAt  DateTime        @default(now())
 }
-

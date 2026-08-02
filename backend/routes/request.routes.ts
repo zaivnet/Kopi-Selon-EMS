@@ -12,6 +12,8 @@ import {
   getPendingCount,
   getAuditLogs,
   getEligibleSwapPeers,
+  getShiftPreview,
+  clearAllRequests,
 } from '../controllers/request.controller.js';
 import { authenticate, authorizePermission } from '../middleware/auth.middleware.js';
 
@@ -54,10 +56,12 @@ router.post('/upload-attachment', upload.single('file'), (req, res) => {
 
 router.get('/pending-count', getPendingCount);
 router.get('/eligible-swap-peers', getEligibleSwapPeers);
+router.get('/shift-preview', getShiftPreview);
 router.get('/audit-logs', authorizePermission('request_center.view'), getAuditLogs);
 router.get('/', authorizePermission('request_center.view'), getRequests);
 router.get('/:id', authorizePermission('request_center.view'), getRequestById);
 router.post('/', authorizePermission('request_center.create'), createRequest);
+router.delete('/clear-all', authorizePermission('request_center.approve'), clearAllRequests);
 router.post('/:id/peer-respond', respondPeerSwap);
 router.post('/:id/approve', authorizePermission('request_center.approve'), approveRequest);
 router.post('/:id/reject', authorizePermission('request_center.approve'), rejectRequest);

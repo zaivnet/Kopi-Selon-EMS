@@ -18,6 +18,7 @@ export default function ReportPage() {
   const [endDate, setEndDate] = useState('');
   const [employeeId, setEmployeeId] = useState('');
   const [shiftId, setShiftId] = useState('');
+  const [outletId, setOutletId] = useState('');
   
   const reportRef = useRef(null);
 
@@ -31,8 +32,13 @@ export default function ReportPage() {
     queryFn: async () => (await api.get('/shifts')).data
   });
 
+  const { data: outlets } = useQuery({
+    queryKey: ['outletsReport'],
+    queryFn: async () => (await api.get('/outlets')).data
+  });
+
   const { data: reportData, isLoading } = useQuery({
-    queryKey: ['reportData', filterType, month, year, startDate, endDate, employeeId, shiftId],
+    queryKey: ['reportData', filterType, month, year, startDate, endDate, employeeId, shiftId, outletId],
     queryFn: async () => {
       const params: any = {};
       if (filterType === 'month') {
@@ -46,6 +52,7 @@ export default function ReportPage() {
       }
       if (employeeId) params.employeeId = employeeId;
       if (shiftId) params.shiftId = shiftId;
+      if (outletId) params.outletId = outletId;
       
       const res = await api.get('/reports', { params });
       return res.data;
@@ -199,6 +206,16 @@ export default function ReportPage() {
                 <option value="">Semua Shift</option>
                 {shifts?.map((s: any) => (
                   <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-2 lg:col-span-1">
+              <label className="text-sm font-medium">Cabang (Outlet)</label>
+              <select value={outletId} onChange={e => setOutletId(e.target.value)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background">
+                <option value="">Semua Cabang</option>
+                {outlets?.map((o: any) => (
+                  <option key={o.id} value={o.id}>{o.name} ({o.code})</option>
                 ))}
               </select>
             </div>

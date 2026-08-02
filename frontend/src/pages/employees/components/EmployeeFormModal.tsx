@@ -16,6 +16,7 @@ const schema = z.object({
   username: z.string().optional(),
   password: z.string().optional(),
   roleId: z.string().min(1, 'Role wajib diisi'),
+  outletId: z.string().optional(),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -27,19 +28,24 @@ export default function EmployeeFormModal({ employee, onClose, onSuccess }: { em
 
   const { hasPermission } = useAuth();
   const [roles, setRoles] = useState<any[]>([]);
+  const [outlets, setOutlets] = useState<any[]>([]);
   const STAFF_ASSIGNABLE_ROLES = ['Karyawan'];
   const isStaffLikeRole = !hasPermission('user_management.edit_user') && (hasPermission('employee.edit') || hasPermission('employee.create'));
 
   useEffect(() => {
-    const fetchRoles = async () => {
+    const fetchData = async () => {
       try {
-        const res = await api.get('/roles');
-        setRoles(res.data);
+        const [rolesRes, outletsRes] = await Promise.all([
+          api.get('/roles'),
+          api.get('/outlets')
+        ]);
+        setRoles(rolesRes.data);
+        setOutlets(outletsRes.data);
       } catch (err) {
-        console.warn('Failed to fetch roles');
+        console.warn('Failed to fetch roles/outlets');
       }
     };
-    fetchRoles();
+    fetchData();
   }, []);
 
   const filteredRoles = useMemo(() => {
@@ -68,6 +74,7 @@ export default function EmployeeFormModal({ employee, onClose, onSuccess }: { em
         baseSalary: employee.baseSalary?.toString() || '',
         username: employee.user?.username || '',
         roleId: employee.user?.roleId || '',
+        outletId: employee.outletId || '',
         password: '', 
       });
     }
@@ -157,6 +164,19 @@ export default function EmployeeFormModal({ employee, onClose, onSuccess }: { em
               {isRoleSelectDisabled && (
                 <p className="text-xs text-slate-500 mt-1">Staff hanya dapat mengubah role Staff/Karyawan, sehingga role ini tidak dapat diubah.</p>
               )}
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">Cabang Utama (Outlet)</label>
+              <select
+                {...register('outletId')}
+                className="mt-1 flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                <option value="">Pilih Cabang Utama</option>
+                {outlets.map(outlet => (
+                  <option key={outlet.id} value={outlet.id}>{outlet.name} ({outlet.code})</option>
+                ))}
+              </select>
             </div>
 
             <div className="col-span-full border-b pb-2 mb-2 mt-4">
