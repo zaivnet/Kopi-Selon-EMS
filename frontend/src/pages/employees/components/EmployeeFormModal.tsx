@@ -65,20 +65,34 @@ export default function EmployeeFormModal({ employee, onClose, onSuccess }: { em
 
   useEffect(() => {
     if (employee) {
-      const fullName = `${employee.firstName || ''} ${employee.lastName || ''}`.trim();
+      if (roles.length > 0 && outlets.length > 0) {
+        const fullName = `${employee.firstName || ''} ${employee.lastName || ''}`.trim();
+        reset({
+          name: fullName,
+          gender: employee.gender || '',
+          phone: employee.phone || '',
+          address: employee.address || '',
+          baseSalary: employee.baseSalary?.toString() || '',
+          username: employee.user?.username || '',
+          roleId: employee.user?.roleId || '',
+          outletId: employee.outletId || '',
+          password: '', 
+        });
+      }
+    } else {
       reset({
-        name: fullName,
-        gender: employee.gender || '',
-        phone: employee.phone || '',
-        address: employee.address || '',
-        baseSalary: employee.baseSalary?.toString() || '',
-        username: employee.user?.username || '',
-        roleId: employee.user?.roleId || '',
-        outletId: employee.outletId || '',
-        password: '', 
+        name: '',
+        gender: '',
+        phone: '',
+        address: '',
+        baseSalary: '',
+        username: '',
+        roleId: '',
+        outletId: '',
+        password: '',
       });
     }
-  }, [employee, reset]);
+  }, [employee, reset, roles, outlets]);
 
   const onSubmit = async (data: FormData) => {
     if (!employee) {
