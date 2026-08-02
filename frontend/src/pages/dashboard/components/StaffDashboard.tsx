@@ -222,13 +222,6 @@ export default function StaffDashboard() {
           members: shiftGroups[s.id] || []
         }));
 
-        shiftList.push({
-          shiftId: 'OFF',
-          shiftName: '⛔ Libur / Off',
-          shiftTime: 'Off',
-          members: shiftGroups['OFF'] || []
-        });
-
         daysData[d.key] = {
           formattedDate: d.date.format('dddd, D MMMM YYYY'),
           shifts: shiftList
