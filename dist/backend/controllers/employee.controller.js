@@ -146,6 +146,26 @@ export const createEmployee = async (req, res) => {
         const parsedSalary = (baseSalary !== undefined && baseSalary !== null && baseSalary !== '')
             ? parseFloat(baseSalary)
             : null;
+        let finalOutletId = outletId || null;
+        if (!finalOutletId) {
+            const defaultOutlet = await prisma.outlet.findFirst({
+                where: { deletedAt: null, isActive: true },
+                orderBy: { createdAt: 'asc' }
+            });
+            if (defaultOutlet) {
+                finalOutletId = defaultOutlet.id;
+            }
+        }
+        let finalGender = null;
+        if (gender) {
+            const g = gender.toString().toLowerCase().trim();
+            if (g.startsWith('l') || g === 'laki-laki' || g === 'laki laki') {
+                finalGender = 'L';
+            }
+            else if (g.startsWith('p') || g === 'perempuan') {
+                finalGender = 'P';
+            }
+        }
         const result = await prisma.$transaction(async (tx) => {
             const user = await tx.user.create({
                 data: { username: username.trim(), password: hashedPassword, roleId }
@@ -155,32 +175,17 @@ export const createEmployee = async (req, res) => {
                     userId: user.id,
                     firstName,
                     lastName: lastName || null,
-                    gender: gender || null,
+                    gender: finalGender,
                     phone: phone || null,
                     address: address || null,
                     status: status || 'ACTIVE',
                     shiftId: shiftId || null,
-                    outletId: outletId || null,
+                    outletId: finalOutletId,
                     joinDate: joinDate ? new Date(joinDate) : null,
                     baseSalary: (parsedSalary !== null && !isNaN(parsedSalary)) ? parsedSalary : null,
                 }
             });
             return employee;
-        });
-        await prisma.activityLog.create({
-            data: {
-                userId: req.user.id,
-                action: 'CREATE_EMPLOYEE',
-                entity: 'Employee',
-                entityId: result.id,
-                details: JSON.stringify({
-                    username: username.trim(),
-                    name: `${result.firstName} ${result.lastName || ''}`.trim(),
-                    status: result.status,
-                    outletId: result.outletId
-                }),
-                ipAddress: req.ip || null
-            }
         });
         res.status(201).json(result);
     }
@@ -210,11 +215,14 @@ export const updateEmployee = async (req, res) => {
         }
         if (roleId && roleId !== employee.user.roleId) {
             const selectedRole = await prisma.role.findUnique({ where: { id: roleId } });
-            if (selectedRole?.name === 'Owner' && currentUserRole !== 'Administrator' && currentUserRole !== 'Owner') {
+            if (!selectedRole) {
+                return res.status(400).json({ message: 'Role yang dipilih tidak valid.' });
+            }
+            if (selectedRole.name === 'Owner' && currentUserRole !== 'Administrator' && currentUserRole !== 'Owner') {
                 return res.status(403).json({ message: 'Akses ditolak: Anda tidak memiliki wewenang untuk menetapkan role Owner.' });
             }
             if (currentUserRole === 'Staff') {
-                if (selectedRole && !STAFF_ASSIGNABLE_ROLES.includes(selectedRole.name)) {
+                if (!STAFF_ASSIGNABLE_ROLES.includes(selectedRole.name)) {
                     return res.status(403).json({ message: 'Staff hanya boleh menetapkan role Staff atau Karyawan.' });
                 }
             }
@@ -243,19 +251,48 @@ export const updateEmployee = async (req, res) => {
         const parsedSalary = (baseSalary !== undefined && baseSalary !== null && baseSalary !== '')
             ? parseFloat(baseSalary)
             : null;
+        let finalGender = employee.gender;
+        if (gender !== undefined) {
+            if (gender) {
+                const g = gender.toString().toLowerCase().trim();
+                if (g.startsWith('l') || g === 'laki-laki' || g === 'laki laki') {
+                    finalGender = 'L';
+                }
+                else if (g.startsWith('p') || g === 'perempuan') {
+                    finalGender = 'P';
+                }
+                else {
+                    finalGender = gender;
+                }
+            }
+            else {
+                finalGender = null;
+            }
+        }
+        let finalJoinDate = employee.joinDate;
+        if (joinDate) {
+            const parsedDate = new Date(joinDate);
+            if (isNaN(parsedDate.getTime())) {
+                return res.status(400).json({ message: 'Format tanggal bergabung (joinDate) tidak valid.' });
+            }
+            finalJoinDate = parsedDate;
+        }
+        else if (joinDate === null) {
+            finalJoinDate = null;
+        }
         await prisma.$transaction(async (tx) => {
             await tx.employee.update({
                 where: { id },
                 data: {
                     firstName,
                     lastName: lastName !== undefined ? (lastName || null) : employee.lastName,
-                    gender: gender !== undefined ? (gender || null) : employee.gender,
+                    gender: finalGender,
                     phone: phone !== undefined ? (phone || null) : employee.phone,
                     address: address !== undefined ? (address || null) : employee.address,
                     status: status || employee.status,
                     shiftId: shiftId !== undefined ? (shiftId || null) : employee.shiftId,
                     outletId: outletId !== undefined ? (outletId || null) : employee.outletId,
-                    joinDate: joinDate ? new Date(joinDate) : employee.joinDate,
+                    joinDate: finalJoinDate,
                     baseSalary: baseSalary !== undefined
                         ? ((parsedSalary !== null && !isNaN(parsedSalary)) ? parsedSalary : null)
                         : employee.baseSalary,
@@ -278,28 +315,6 @@ export const updateEmployee = async (req, res) => {
                 });
             }
         });
-        const updatedEmployee = await prisma.employee.findUnique({
-            where: { id },
-            include: { user: { include: { role: true } } }
-        });
-        if (updatedEmployee) {
-            await prisma.activityLog.create({
-                data: {
-                    userId: req.user.id,
-                    action: 'UPDATE_EMPLOYEE',
-                    entity: 'Employee',
-                    entityId: id,
-                    details: JSON.stringify({
-                        username: updatedEmployee.user.username,
-                        name: `${updatedEmployee.firstName} ${updatedEmployee.lastName || ''}`.trim(),
-                        status: updatedEmployee.status,
-                        role: updatedEmployee.user.role.name,
-                        outletId: updatedEmployee.outletId
-                    }),
-                    ipAddress: req.ip || null
-                }
-            });
-        }
         res.json({ message: 'Employee updated successfully' });
     }
     catch (error) {
@@ -324,7 +339,6 @@ export const deleteEmployee = async (req, res) => {
         if (targetEmployeeRole === 'Owner' && currentUserRole !== 'Administrator' && currentUserRole !== 'Owner') {
             return res.status(403).json({ message: 'Akses ditolak: Anda tidak memiliki wewenang untuk menghapus profil Owner.' });
         }
-        let freedUsername = '';
         // Soft delete employee and user, freeing up username for future reuse
         await prisma.$transaction(async (tx) => {
             const deletedEmp = await tx.employee.update({
@@ -332,7 +346,7 @@ export const deleteEmployee = async (req, res) => {
                 data: { deletedAt: new Date() },
                 include: { user: true }
             });
-            freedUsername = `${deletedEmp.user.username}_deleted_${Date.now()}`;
+            const freedUsername = `${deletedEmp.user.username}_deleted_${Date.now()}`;
             await tx.user.update({
                 where: { id: deletedEmp.userId },
                 data: {
@@ -340,21 +354,34 @@ export const deleteEmployee = async (req, res) => {
                     username: freedUsername
                 }
             });
-        });
-        await prisma.activityLog.create({
-            data: {
-                userId: req.user.id,
-                action: 'DELETE_EMPLOYEE',
-                entity: 'Employee',
-                entityId: id,
-                details: JSON.stringify({
-                    id,
-                    username: employee.user.username,
-                    name: `${employee.firstName} ${employee.lastName || ''}`.trim(),
-                    freedUsername
-                }),
-                ipAddress: req.ip || null
-            }
+            const todayStart = new Date();
+            todayStart.setHours(0, 0, 0, 0);
+            // 1. Delete all future WorkSchedule entries (soft-delete)
+            await tx.workSchedule.updateMany({
+                where: {
+                    employeeId: id,
+                    date: { gte: todayStart },
+                    deletedAt: null
+                },
+                data: {
+                    deletedAt: new Date()
+                }
+            });
+            // 2. Cancel and soft-delete all active EmployeeRequest entries
+            await tx.employeeRequest.updateMany({
+                where: {
+                    OR: [
+                        { employeeId: id },
+                        { targetEmployeeId: id }
+                    ],
+                    status: { in: ['Submitted', 'Waiting Employee Approval', 'Waiting Staff Approval'] },
+                    deletedAt: null
+                },
+                data: {
+                    status: 'Cancelled',
+                    deletedAt: new Date()
+                }
+            });
         });
         res.json({ message: 'Employee deleted successfully' });
     }

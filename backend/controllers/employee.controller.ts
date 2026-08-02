@@ -50,7 +50,7 @@ export const getEmployees = async (req: AuthRequest, res: Response) => {
     const nowWib = new Date(Date.now() + WIB_MS);
     const todayWibStr = `${nowWib.getUTCFullYear()}-${String(nowWib.getUTCMonth() + 1).padStart(2, '0')}-${String(nowWib.getUTCDate()).padStart(2, '0')}`;
     const scheduleStart = new Date(`${todayWibStr}T00:00:00+07:00`);
-    const scheduleEnd   = new Date(scheduleStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const scheduleEnd = new Date(scheduleStart.getTime() + 7 * 24 * 60 * 60 * 1000);
 
     const employees = await prisma.employee.findMany({
       include: {
@@ -127,7 +127,7 @@ export const createEmployee = async (req: AuthRequest, res: Response) => {
     const {
       name, firstName: reqFirstName, lastName: reqLastName,
       username, password, roleId,
-      gender, phone, address, 
+      gender, phone, address,
       status, shiftId, outletId, joinDate, baseSalary
     } = req.body;
 
@@ -164,9 +164,30 @@ export const createEmployee = async (req: AuthRequest, res: Response) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const parsedSalary = (baseSalary !== undefined && baseSalary !== null && baseSalary !== '') 
-      ? parseFloat(baseSalary) 
+    const parsedSalary = (baseSalary !== undefined && baseSalary !== null && baseSalary !== '')
+      ? parseFloat(baseSalary)
       : null;
+
+    let finalOutletId = outletId || null;
+    if (!finalOutletId) {
+      const defaultOutlet = await prisma.outlet.findFirst({
+        where: { deletedAt: null, isActive: true },
+        orderBy: { createdAt: 'asc' }
+      });
+      if (defaultOutlet) {
+        finalOutletId = defaultOutlet.id;
+      }
+    }
+
+    let finalGender = null;
+    if (gender) {
+      const g = gender.toString().toLowerCase().trim();
+      if (g.startsWith('l') || g === 'laki-laki' || g === 'laki laki') {
+        finalGender = 'L';
+      } else if (g.startsWith('p') || g === 'perempuan') {
+        finalGender = 'P';
+      }
+    }
 
     const result = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
@@ -178,33 +199,17 @@ export const createEmployee = async (req: AuthRequest, res: Response) => {
           userId: user.id,
           firstName,
           lastName: lastName || null,
-          gender: gender || null,
+          gender: finalGender,
           phone: phone || null,
           address: address || null,
           status: status || 'ACTIVE',
           shiftId: shiftId || null,
-          outletId: outletId || null,
+          outletId: finalOutletId,
           joinDate: joinDate ? new Date(joinDate) : null,
           baseSalary: (parsedSalary !== null && !isNaN(parsedSalary)) ? parsedSalary : null,
         }
       });
       return employee;
-    });
-
-    await prisma.activityLog.create({
-      data: {
-        userId: req.user.id,
-        action: 'CREATE_EMPLOYEE',
-        entity: 'Employee',
-        entityId: result.id,
-        details: JSON.stringify({
-          username: username.trim(),
-          name: `${result.firstName} ${result.lastName || ''}`.trim(),
-          status: result.status,
-          outletId: result.outletId
-        }),
-        ipAddress: req.ip || null
-      }
     });
 
     res.status(201).json(result);
@@ -223,7 +228,7 @@ export const updateEmployee = async (req: AuthRequest, res: Response) => {
     const {
       name, firstName: reqFirstName, lastName: reqLastName,
       username: reqUsername, password: reqPassword,
-      gender, phone, address, 
+      gender, phone, address,
       status, shiftId, outletId, joinDate, baseSalary, roleId
     } = req.body;
 
@@ -244,11 +249,14 @@ export const updateEmployee = async (req: AuthRequest, res: Response) => {
 
     if (roleId && roleId !== employee.user.roleId) {
       const selectedRole = await prisma.role.findUnique({ where: { id: roleId } });
-      if (selectedRole?.name === 'Owner' && currentUserRole !== 'Administrator' && currentUserRole !== 'Owner') {
+      if (!selectedRole) {
+        return res.status(400).json({ message: 'Role yang dipilih tidak valid.' });
+      }
+      if (selectedRole.name === 'Owner' && currentUserRole !== 'Administrator' && currentUserRole !== 'Owner') {
         return res.status(403).json({ message: 'Akses ditolak: Anda tidak memiliki wewenang untuk menetapkan role Owner.' });
       }
       if (currentUserRole === 'Staff') {
-        if (selectedRole && !STAFF_ASSIGNABLE_ROLES.includes(selectedRole.name)) {
+        if (!STAFF_ASSIGNABLE_ROLES.includes(selectedRole.name)) {
           return res.status(403).json({ message: 'Staff hanya boleh menetapkan role Staff atau Karyawan.' });
         }
       }
@@ -278,9 +286,36 @@ export const updateEmployee = async (req: AuthRequest, res: Response) => {
       lastName = parts.slice(1).join(' ') || '';
     }
 
-    const parsedSalary = (baseSalary !== undefined && baseSalary !== null && baseSalary !== '') 
-      ? parseFloat(baseSalary) 
+    const parsedSalary = (baseSalary !== undefined && baseSalary !== null && baseSalary !== '')
+      ? parseFloat(baseSalary)
       : null;
+
+    let finalGender = employee.gender;
+    if (gender !== undefined) {
+      if (gender) {
+        const g = gender.toString().toLowerCase().trim();
+        if (g.startsWith('l') || g === 'laki-laki' || g === 'laki laki') {
+          finalGender = 'L';
+        } else if (g.startsWith('p') || g === 'perempuan') {
+          finalGender = 'P';
+        } else {
+          finalGender = gender;
+        }
+      } else {
+        finalGender = null;
+      }
+    }
+
+    let finalJoinDate = employee.joinDate;
+    if (joinDate) {
+      const parsedDate = new Date(joinDate);
+      if (isNaN(parsedDate.getTime())) {
+        return res.status(400).json({ message: 'Format tanggal bergabung (joinDate) tidak valid.' });
+      }
+      finalJoinDate = parsedDate;
+    } else if (joinDate === null) {
+      finalJoinDate = null;
+    }
 
     await prisma.$transaction(async (tx) => {
       await tx.employee.update({
@@ -288,15 +323,15 @@ export const updateEmployee = async (req: AuthRequest, res: Response) => {
         data: {
           firstName,
           lastName: lastName !== undefined ? (lastName || null) : employee.lastName,
-          gender: gender !== undefined ? (gender || null) : employee.gender,
+          gender: finalGender,
           phone: phone !== undefined ? (phone || null) : employee.phone,
           address: address !== undefined ? (address || null) : employee.address,
           status: status || employee.status,
           shiftId: shiftId !== undefined ? (shiftId || null) : employee.shiftId,
           outletId: outletId !== undefined ? (outletId || null) : employee.outletId,
-          joinDate: joinDate ? new Date(joinDate) : employee.joinDate,
-          baseSalary: baseSalary !== undefined 
-            ? ((parsedSalary !== null && !isNaN(parsedSalary)) ? parsedSalary : null) 
+          joinDate: finalJoinDate,
+          baseSalary: baseSalary !== undefined
+            ? ((parsedSalary !== null && !isNaN(parsedSalary)) ? parsedSalary : null)
             : employee.baseSalary,
         }
       });
@@ -320,30 +355,6 @@ export const updateEmployee = async (req: AuthRequest, res: Response) => {
       }
     });
 
-    const updatedEmployee = await prisma.employee.findUnique({
-      where: { id },
-      include: { user: { include: { role: true } } }
-    });
-
-    if (updatedEmployee) {
-      await prisma.activityLog.create({
-        data: {
-          userId: req.user.id,
-          action: 'UPDATE_EMPLOYEE',
-          entity: 'Employee',
-          entityId: id,
-          details: JSON.stringify({
-            username: updatedEmployee.user.username,
-            name: `${updatedEmployee.firstName} ${updatedEmployee.lastName || ''}`.trim(),
-            status: updatedEmployee.status,
-            role: updatedEmployee.user.role.name,
-            outletId: updatedEmployee.outletId
-          }),
-          ipAddress: req.ip || null
-        }
-      });
-    }
-
     res.json({ message: 'Employee updated successfully' });
   } catch (error: any) {
     console.error('Update Employee Error:', error);
@@ -357,22 +368,21 @@ export const updateEmployee = async (req: AuthRequest, res: Response) => {
 export const deleteEmployee = async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string;
-    
+
     const employee = await prisma.employee.findUnique({
       where: { id },
       include: { user: { include: { role: true } } }
     });
-    
+
     if (!employee) return res.status(404).json({ message: 'Employee not found' });
-    
+
     const currentUserRole = req.user?.role?.name || req.user?.role;
     const targetEmployeeRole = employee.user?.role?.name;
-    
+
     if (targetEmployeeRole === 'Owner' && currentUserRole !== 'Administrator' && currentUserRole !== 'Owner') {
       return res.status(403).json({ message: 'Akses ditolak: Anda tidak memiliki wewenang untuk menghapus profil Owner.' });
     }
-    
-    let freedUsername = '';
+
     // Soft delete employee and user, freeing up username for future reuse
     await prisma.$transaction(async (tx) => {
       const deletedEmp = await tx.employee.update({
@@ -381,7 +391,7 @@ export const deleteEmployee = async (req: AuthRequest, res: Response) => {
         include: { user: true }
       });
 
-      freedUsername = `${deletedEmp.user.username}_deleted_${Date.now()}`;
+      const freedUsername = `${deletedEmp.user.username}_deleted_${Date.now()}`;
       await tx.user.update({
         where: { id: deletedEmp.userId },
         data: {
@@ -389,22 +399,37 @@ export const deleteEmployee = async (req: AuthRequest, res: Response) => {
           username: freedUsername
         }
       });
-    });
 
-    await prisma.activityLog.create({
-      data: {
-        userId: req.user.id,
-        action: 'DELETE_EMPLOYEE',
-        entity: 'Employee',
-        entityId: id,
-        details: JSON.stringify({
-          id,
-          username: employee.user.username,
-          name: `${employee.firstName} ${employee.lastName || ''}`.trim(),
-          freedUsername
-        }),
-        ipAddress: req.ip || null
-      }
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+
+      // 1. Delete all future WorkSchedule entries (soft-delete)
+      await tx.workSchedule.updateMany({
+        where: {
+          employeeId: id,
+          date: { gte: todayStart },
+          deletedAt: null
+        },
+        data: {
+          deletedAt: new Date()
+        }
+      });
+
+      // 2. Cancel and soft-delete all active EmployeeRequest entries
+      await tx.employeeRequest.updateMany({
+        where: {
+          OR: [
+            { employeeId: id },
+            { targetEmployeeId: id }
+          ],
+          status: { in: ['Submitted', 'Waiting Employee Approval', 'Waiting Staff Approval'] },
+          deletedAt: null
+        },
+        data: {
+          status: 'Cancelled',
+          deletedAt: new Date()
+        }
+      });
     });
 
     res.json({ message: 'Employee deleted successfully' });
@@ -422,7 +447,7 @@ export const resetPassword = async (req: AuthRequest, res: Response) => {
     if (!employee) return res.status(404).json({ message: 'Employee not found' });
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    
+
     await prisma.user.update({
       where: { id: employee.userId },
       data: { password: hashedPassword }
@@ -437,7 +462,7 @@ export const resetPassword = async (req: AuthRequest, res: Response) => {
 export const uploadPhoto = async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string;
-    
+
     // Check if a file is uploaded
     if (!req.file) {
       return res.status(400).json({ message: 'No image uploaded' });
@@ -520,16 +545,16 @@ export const importEmployees = async (req: AuthRequest, res: Response) => {
         if (empData.outletName) {
           const cleanOutletName = empData.outletName.toString().toLowerCase().trim();
           const normalizedInputOutlet = normalizeText(cleanOutletName);
-          
+
           if (normalizedInputOutlet && normalizedInputOutlet !== '-') {
             const matchedOutlet = allOutlets.find(o => {
               const normalizedName = normalizeText(o.name);
               const normalizedCode = normalizeText(o.code);
-              return normalizedName === normalizedInputOutlet || 
-                     normalizedName.includes(normalizedInputOutlet) ||
-                     normalizedInputOutlet.includes(normalizedName) ||
-                     normalizedCode === normalizedInputOutlet ||
-                     normalizedInputOutlet.includes(normalizedCode);
+              return normalizedName === normalizedInputOutlet ||
+                normalizedName.includes(normalizedInputOutlet) ||
+                normalizedInputOutlet.includes(normalizedName) ||
+                normalizedCode === normalizedInputOutlet ||
+                normalizedInputOutlet.includes(normalizedCode);
             });
             if (matchedOutlet) {
               outletId = matchedOutlet.id;
@@ -545,12 +570,12 @@ export const importEmployees = async (req: AuthRequest, res: Response) => {
         if (empData.roleName) {
           const cleanRoleName = empData.roleName.toString().toLowerCase().trim();
           const normalizedInputRole = normalizeText(cleanRoleName);
-          
+
           const matchedRole = allRoles.find(r => {
             const normalizedRoleName = normalizeText(r.name);
-            return normalizedRoleName === normalizedInputRole || 
-                   normalizedRoleName.includes(normalizedInputRole) || 
-                   normalizedInputRole.includes(normalizedRoleName);
+            return normalizedRoleName === normalizedInputRole ||
+              normalizedRoleName.includes(normalizedInputRole) ||
+              normalizedInputRole.includes(normalizedRoleName);
           });
           if (matchedRole) {
             roleId = matchedRole.id;
