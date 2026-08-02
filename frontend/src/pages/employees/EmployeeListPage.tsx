@@ -85,6 +85,7 @@ export default function EmployeeListPage() {
           status: row['Status'] || 'ACTIVE',
           shiftName: row['Shift'] || '',
           outletName: row['Cabang'] || '',
+          roleName: row['Role'] || '',
           username: row['Username'] || '',
           password: row['Password Hash'] || row['Password'] || '123456'
         })).filter(emp => emp.username && emp.firstName);

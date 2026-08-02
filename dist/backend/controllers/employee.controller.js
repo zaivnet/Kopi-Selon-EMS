@@ -357,12 +357,15 @@ export const importEmployees = async (req, res) => {
         if (!karyawanRole) {
             return res.status(500).json({ message: 'Role Karyawan tidak ditemukan dalam sistem.' });
         }
-        const [allShifts, allOutlets] = await Promise.all([
+        const [allShifts, allOutlets, allRoles] = await Promise.all([
             prisma.workShift.findMany({ where: { deletedAt: null } }),
-            prisma.outlet.findMany({ where: { deletedAt: null } })
+            prisma.outlet.findMany({ where: { deletedAt: null } }),
+            prisma.role.findMany({ where: { deletedAt: null } })
         ]);
+        const normalizeText = (text) => text.toLowerCase().replace(/[^a-z0-9]/g, '');
         const shiftMap = new Map(allShifts.map((s) => [s.name.toLowerCase().trim(), s.id]));
-        const outletMap = new Map(allOutlets.map((o) => [o.name.toLowerCase().trim(), o.id]));
+        const roleMap = new Map(allRoles.map((r) => [r.name.toLowerCase().trim(), r.id]));
+        const defaultRoleId = roleMap.get('karyawan') || karyawanRole.id;
         const results = await prisma.$transaction(async (tx) => {
             const createdEmployees = [];
             const skippedUsernames = [];
@@ -393,22 +396,44 @@ export const importEmployees = async (req, res) => {
                 let outletId = null;
                 if (empData.outletName) {
                     const cleanOutletName = empData.outletName.toString().toLowerCase().trim();
-                    const matchedOutlet = allOutlets.find(o => o.name.toLowerCase().includes(cleanOutletName) ||
-                        cleanOutletName.includes(o.name.toLowerCase()) ||
-                        o.code.toLowerCase().includes(cleanOutletName) ||
-                        cleanOutletName.includes(o.code.toLowerCase()));
-                    if (matchedOutlet) {
-                        outletId = matchedOutlet.id;
+                    const normalizedInputOutlet = normalizeText(cleanOutletName);
+                    if (normalizedInputOutlet && normalizedInputOutlet !== '-') {
+                        const matchedOutlet = allOutlets.find(o => {
+                            const normalizedName = normalizeText(o.name);
+                            const normalizedCode = normalizeText(o.code);
+                            return normalizedName === normalizedInputOutlet ||
+                                normalizedName.includes(normalizedInputOutlet) ||
+                                normalizedInputOutlet.includes(normalizedName) ||
+                                normalizedCode === normalizedInputOutlet ||
+                                normalizedInputOutlet.includes(normalizedCode);
+                        });
+                        if (matchedOutlet) {
+                            outletId = matchedOutlet.id;
+                        }
                     }
                 }
                 if (!outletId && allOutlets.length > 0) {
                     outletId = allOutlets[0].id;
                 }
+                let roleId = defaultRoleId;
+                if (empData.roleName) {
+                    const cleanRoleName = empData.roleName.toString().toLowerCase().trim();
+                    const normalizedInputRole = normalizeText(cleanRoleName);
+                    const matchedRole = allRoles.find(r => {
+                        const normalizedRoleName = normalizeText(r.name);
+                        return normalizedRoleName === normalizedInputRole ||
+                            normalizedRoleName.includes(normalizedInputRole) ||
+                            normalizedInputRole.includes(normalizedRoleName);
+                    });
+                    if (matchedRole) {
+                        roleId = matchedRole.id;
+                    }
+                }
                 const user = await tx.user.create({
                     data: {
                         username: rawUsername,
                         password: hashedPassword,
-                        roleId: karyawanRole.id
+                        roleId
                     }
                 });
                 let joinDate = null;
@@ -427,6 +452,16 @@ export const importEmployees = async (req, res) => {
                         lastName = parts.slice(1).join(' ');
                     }
                 }
+                let gender = null;
+                if (empData.gender) {
+                    const g = empData.gender.toString().toLowerCase().trim();
+                    if (g.startsWith('l') || g === 'laki-laki' || g === 'laki laki') {
+                        gender = 'L';
+                    }
+                    else if (g.startsWith('p') || g === 'perempuan') {
+                        gender = 'P';
+                    }
+                }
                 const employee = await tx.employee.create({
                     data: {
                         userId: user.id,
@@ -434,7 +469,7 @@ export const importEmployees = async (req, res) => {
                         lastName,
                         phone: empData.phone?.toString().trim() || null,
                         address: empData.address?.toString().trim() || null,
-                        gender: empData.gender?.toString().trim() || null,
+                        gender,
                         status: empData.status?.toString().trim() || 'ACTIVE',
                         shiftId,
                         outletId,
