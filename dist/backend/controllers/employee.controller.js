@@ -167,6 +167,21 @@ export const createEmployee = async (req, res) => {
             });
             return employee;
         });
+        await prisma.activityLog.create({
+            data: {
+                userId: req.user.id,
+                action: 'CREATE_EMPLOYEE',
+                entity: 'Employee',
+                entityId: result.id,
+                details: JSON.stringify({
+                    username: username.trim(),
+                    name: `${result.firstName} ${result.lastName || ''}`.trim(),
+                    status: result.status,
+                    outletId: result.outletId
+                }),
+                ipAddress: req.ip || null
+            }
+        });
         res.status(201).json(result);
     }
     catch (error) {
@@ -263,6 +278,28 @@ export const updateEmployee = async (req, res) => {
                 });
             }
         });
+        const updatedEmployee = await prisma.employee.findUnique({
+            where: { id },
+            include: { user: { include: { role: true } } }
+        });
+        if (updatedEmployee) {
+            await prisma.activityLog.create({
+                data: {
+                    userId: req.user.id,
+                    action: 'UPDATE_EMPLOYEE',
+                    entity: 'Employee',
+                    entityId: id,
+                    details: JSON.stringify({
+                        username: updatedEmployee.user.username,
+                        name: `${updatedEmployee.firstName} ${updatedEmployee.lastName || ''}`.trim(),
+                        status: updatedEmployee.status,
+                        role: updatedEmployee.user.role.name,
+                        outletId: updatedEmployee.outletId
+                    }),
+                    ipAddress: req.ip || null
+                }
+            });
+        }
         res.json({ message: 'Employee updated successfully' });
     }
     catch (error) {
@@ -287,6 +324,7 @@ export const deleteEmployee = async (req, res) => {
         if (targetEmployeeRole === 'Owner' && currentUserRole !== 'Administrator' && currentUserRole !== 'Owner') {
             return res.status(403).json({ message: 'Akses ditolak: Anda tidak memiliki wewenang untuk menghapus profil Owner.' });
         }
+        let freedUsername = '';
         // Soft delete employee and user, freeing up username for future reuse
         await prisma.$transaction(async (tx) => {
             const deletedEmp = await tx.employee.update({
@@ -294,7 +332,7 @@ export const deleteEmployee = async (req, res) => {
                 data: { deletedAt: new Date() },
                 include: { user: true }
             });
-            const freedUsername = `${deletedEmp.user.username}_deleted_${Date.now()}`;
+            freedUsername = `${deletedEmp.user.username}_deleted_${Date.now()}`;
             await tx.user.update({
                 where: { id: deletedEmp.userId },
                 data: {
@@ -302,6 +340,21 @@ export const deleteEmployee = async (req, res) => {
                     username: freedUsername
                 }
             });
+        });
+        await prisma.activityLog.create({
+            data: {
+                userId: req.user.id,
+                action: 'DELETE_EMPLOYEE',
+                entity: 'Employee',
+                entityId: id,
+                details: JSON.stringify({
+                    id,
+                    username: employee.user.username,
+                    name: `${employee.firstName} ${employee.lastName || ''}`.trim(),
+                    freedUsername
+                }),
+                ipAddress: req.ip || null
+            }
         });
         res.json({ message: 'Employee deleted successfully' });
     }
