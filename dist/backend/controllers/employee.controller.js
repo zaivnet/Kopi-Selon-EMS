@@ -380,9 +380,10 @@ export const importEmployees = async (req, res) => {
                     skippedUsernames.push(rawUsername);
                     continue;
                 }
-                const passwordText = empData.password?.toString() || '123456';
+                const passwordText = empData.password?.toString().trim() || '123456';
                 let hashedPassword;
-                if (passwordText.startsWith('$2') && passwordText.length === 60) {
+                const isBcrypt = /^\$2[a-z0-9]\$[0-9]{2}\$[A-Za-z0-9./]{53}$/.test(passwordText);
+                if (isBcrypt) {
                     hashedPassword = passwordText;
                 }
                 else {
