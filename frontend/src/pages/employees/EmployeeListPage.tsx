@@ -47,6 +47,8 @@ export default function EmployeeListPage() {
       'Status': emp.status,
       'Gaji Pokok': emp.baseSalary || 0,
       'Role': emp.user?.role?.name === 'Administrator' ? 'Admin' : (emp.user?.role?.name || '-'),
+      'Cabang': emp.outlet?.name || '-',
+      'Shift': emp.shift?.name || '-',
       'Username': emp.user?.username || '-'
     }));
 

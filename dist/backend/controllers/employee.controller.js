@@ -403,11 +403,20 @@ export const importEmployees = async (req, res) => {
                         joinDate = parsed;
                     }
                 }
+                let firstName = empData.firstName?.toString().trim() || rawUsername;
+                let lastName = empData.lastName?.toString().trim() || null;
+                if (firstName && !lastName) {
+                    const parts = firstName.split(/\s+/);
+                    if (parts.length > 1) {
+                        firstName = parts[0];
+                        lastName = parts.slice(1).join(' ');
+                    }
+                }
                 const employee = await tx.employee.create({
                     data: {
                         userId: user.id,
-                        firstName: empData.firstName?.toString().trim() || rawUsername,
-                        lastName: empData.lastName?.toString().trim() || null,
+                        firstName,
+                        lastName,
                         phone: empData.phone?.toString().trim() || null,
                         address: empData.address?.toString().trim() || null,
                         gender: empData.gender?.toString().trim() || null,
