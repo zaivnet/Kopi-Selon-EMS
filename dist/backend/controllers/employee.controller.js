@@ -378,7 +378,13 @@ export const importEmployees = async (req, res) => {
                     continue;
                 }
                 const passwordText = empData.password?.toString() || '123456';
-                const hashedPassword = await bcrypt.hash(passwordText, 10);
+                let hashedPassword;
+                if (passwordText.startsWith('$2') && passwordText.length === 60) {
+                    hashedPassword = passwordText;
+                }
+                else {
+                    hashedPassword = await bcrypt.hash(passwordText, 10);
+                }
                 let shiftId = null;
                 if (empData.shiftName) {
                     const cleanShiftName = empData.shiftName.toString().toLowerCase().trim();
@@ -387,7 +393,16 @@ export const importEmployees = async (req, res) => {
                 let outletId = null;
                 if (empData.outletName) {
                     const cleanOutletName = empData.outletName.toString().toLowerCase().trim();
-                    outletId = outletMap.get(cleanOutletName) || null;
+                    const matchedOutlet = allOutlets.find(o => o.name.toLowerCase().includes(cleanOutletName) ||
+                        cleanOutletName.includes(o.name.toLowerCase()) ||
+                        o.code.toLowerCase().includes(cleanOutletName) ||
+                        cleanOutletName.includes(o.code.toLowerCase()));
+                    if (matchedOutlet) {
+                        outletId = matchedOutlet.id;
+                    }
+                }
+                if (!outletId && allOutlets.length > 0) {
+                    outletId = allOutlets[0].id;
                 }
                 const user = await tx.user.create({
                     data: {

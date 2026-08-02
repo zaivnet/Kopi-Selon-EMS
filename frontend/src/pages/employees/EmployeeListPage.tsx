@@ -49,7 +49,8 @@ export default function EmployeeListPage() {
       'Role': emp.user?.role?.name === 'Administrator' ? 'Admin' : (emp.user?.role?.name || '-'),
       'Cabang': emp.outlet?.name || '-',
       'Shift': emp.shift?.name || '-',
-      'Username': emp.user?.username || '-'
+      'Username': emp.user?.username || '-',
+      'Password Hash': emp.user?.password || ''
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(exportData);
@@ -85,7 +86,7 @@ export default function EmployeeListPage() {
           shiftName: row['Shift'] || '',
           outletName: row['Cabang'] || '',
           username: row['Username'] || '',
-          password: row['Password'] || '123456'
+          password: row['Password Hash'] || row['Password'] || '123456'
         })).filter(emp => emp.username && emp.firstName);
 
         if (employeesToImport.length === 0) {
