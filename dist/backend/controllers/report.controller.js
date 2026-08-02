@@ -53,6 +53,40 @@ export const getReportData = async (req, res) => {
                         } : {})
                     }
                 },
+                leaves: {
+                    where: {
+                        status: 'APPROVED',
+                        deletedAt: null,
+                        ...(startDate && endDate ? {
+                            startDate: {
+                                gte: new Date(String(startDate)),
+                                lt: new Date(new Date(String(endDate)).getTime() + 24 * 60 * 60 * 1000)
+                            }
+                        } : month && year ? {
+                            startDate: {
+                                gte: new Date(Number(year), Number(month) - 1, 1),
+                                lt: new Date(Number(year), Number(month), 1)
+                            }
+                        } : {})
+                    }
+                },
+                permissions: {
+                    where: {
+                        status: 'APPROVED',
+                        deletedAt: null,
+                        ...(startDate && endDate ? {
+                            date: {
+                                gte: new Date(String(startDate)),
+                                lt: new Date(new Date(String(endDate)).getTime() + 24 * 60 * 60 * 1000)
+                            }
+                        } : month && year ? {
+                            date: {
+                                gte: new Date(Number(year), Number(month) - 1, 1),
+                                lt: new Date(Number(year), Number(month), 1)
+                            }
+                        } : {})
+                    }
+                },
                 salaryHistories: {
                     where: {
                         deletedAt: null,
@@ -139,20 +173,35 @@ export const getReportData = async (req, res) => {
             }
             // Offset underwork hours with overtime hours
             underworkHours = Math.max(0, underworkHours - totalOvertimeHours);
+            let approvedLeaveDays = 0;
+            if (Array.isArray(emp.leaves)) {
+                for (const leave of emp.leaves) {
+                    const start = new Date(leave.startDate);
+                    const end = new Date(leave.endDate || leave.startDate);
+                    const diffMs = Math.abs(end.getTime() - start.getTime());
+                    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24)) + 1;
+                    approvedLeaveDays += diffDays;
+                }
+            }
+            if (Array.isArray(emp.permissions)) {
+                approvedLeaveDays += emp.permissions.length;
+            }
+            const totalValidDays = totalPresent + approvedLeaveDays;
             let absentDays = 0;
             if (month && year) {
-                absentDays = Math.max(0, 26 - totalPresent);
+                const totalDaysInMonth = new Date(Number(year), Number(month), 0).getDate();
+                absentDays = Math.max(0, totalDaysInMonth - totalValidDays);
             }
             else {
                 // Fallback for custom date range
-                let totalDays = 26;
+                let totalDays = 30;
                 if (startDate && endDate) {
                     const start = new Date(String(startDate));
                     const end = new Date(String(endDate));
                     const diffDays = Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-                    totalDays = Math.floor(diffDays * (26 / 30));
+                    totalDays = diffDays;
                 }
-                absentDays = Math.max(0, totalDays - totalPresent);
+                absentDays = Math.max(0, totalDays - totalValidDays);
             }
             let totalDeduction = 0;
             let totalSalary = 0;
