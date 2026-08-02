@@ -444,18 +444,25 @@ export const getMonitoring = async (req, res) => {
                 status = attendance.status;
             }
             return {
-                employeeId: emp.id,
-                employeeName: `${emp.firstName} ${emp.lastName || ''}`.trim(),
-                username: emp.user.username,
-                roleName: emp.user.role.name,
-                shift: activeShift ? `${activeShift.name} (${activeShift.startTime} - ${activeShift.endTime})` : 'Belum diatur',
-                outlet: activeOutlet ? activeOutlet.name : 'Utama',
-                outletCode: activeOutlet?.code || 'SELON-1',
-                attendanceId: attendance?.id || null,
-                clockIn: attendance?.clockIn || null,
-                clockOut: attendance?.clockOut || null,
-                status,
-                photos: attendance?.photos || []
+                employee: {
+                    id: emp.id,
+                    firstName: emp.firstName,
+                    lastName: emp.lastName || '',
+                    position: emp.user.role.name || 'Karyawan',
+                    roleName: emp.user.role.name || 'Karyawan'
+                },
+                shift: activeShift ? {
+                    name: activeShift.name,
+                    startTime: activeShift.startTime,
+                    endTime: activeShift.endTime
+                } : null,
+                attendance: attendance ? {
+                    id: attendance.id,
+                    clockIn: attendance.clockIn ? attendance.clockIn.toISOString() : null,
+                    clockOut: attendance.clockOut ? attendance.clockOut.toISOString() : null,
+                    photos: attendance.photos || []
+                } : null,
+                status
             };
         });
         res.json(monitoringData);
